@@ -4,7 +4,7 @@ let appState = {
   updatedAt: null
 };
 
-// Jerarquía de Rangos para ordenamiento preciso en Valorant
+// Jerarquía de Rangos para ordenamiento en Valorant
 const RANK_ORDER = {
   'Radiant': 8000,
   'Immortal 3': 7000,
@@ -41,8 +41,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 async function initDashboard() {
   try {
-    const res = await fetch('stats.json?t=' + new Date().getTime());
-    if (!res.ok) throw new Error('No se cargó stats.json');
+    const res = await fetch('/api/stats');
+    if (!res.ok) throw new Error('Error al consultar la API');
     const data = await res.json();
 
     appState.players = data.players || [];
@@ -53,6 +53,10 @@ async function initDashboard() {
     setupEventListeners();
   } catch (error) {
     console.error('Error cargando leaderboard:', error);
+    const tbody = document.getElementById('leaderboardBody');
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-red-400 font-bold">Error al cargar las estadísticas.</td></tr>`;
+    }
   }
 }
 
@@ -64,8 +68,9 @@ function calculateScore(player) {
 
 function updateLastUpdatedText(dateStr) {
   const el = document.getElementById('lastUpdated');
+  if (!el) return;
   if (!dateStr) {
-    el.textContent = 'No disponible';
+    el.textContent = 'Hace instantes';
     return;
   }
   const date = new Date(dateStr);
@@ -73,13 +78,19 @@ function updateLastUpdatedText(dateStr) {
 }
 
 function setupEventListeners() {
-  document.getElementById('searchInput').addEventListener('input', applyFiltersAndSort);
-  document.getElementById('sortSelect').addEventListener('change', applyFiltersAndSort);
+  const searchInput = document.getElementById('searchInput');
+  const sortSelect = document.getElementById('sortSelect');
+
+  if (searchInput) searchInput.addEventListener('input', applyFiltersAndSort);
+  if (sortSelect) sortSelect.addEventListener('change', applyFiltersAndSort);
 }
 
 function applyFiltersAndSort() {
-  const search = document.getElementById('searchInput').value.toLowerCase();
-  const sortBy = document.getElementById('sortSelect').value;
+  const searchInput = document.getElementById('searchInput');
+  const sortSelect = document.getElementById('sortSelect');
+  
+  const search = searchInput ? searchInput.value.toLowerCase() : '';
+  const sortBy = sortSelect ? sortSelect.value : 'rank';
 
   appState.filteredPlayers = appState.players.filter(p => 
     `${p.name}#${p.tag}`.toLowerCase().includes(search)
@@ -88,7 +99,6 @@ function applyFiltersAndSort() {
   appState.filteredPlayers.sort((a, b) => {
     if (sortBy === 'kd') return (b.stats?.kd || 0) - (a.stats?.kd || 0);
     if (sortBy === 'winrate') return (b.stats?.winRate || 0) - (a.stats?.winRate || 0);
-    // Por defecto: ELO / Rango + RR
     return calculateScore(b) - calculateScore(a);
   });
 
@@ -98,14 +108,15 @@ function applyFiltersAndSort() {
 
 function renderPodium() {
   const podiumContainer = document.getElementById('podiumContainer');
+  if (!podiumContainer) return;
   podiumContainer.innerHTML = '';
 
   const top3 = appState.filteredPlayers.slice(0, 3);
 
   const crownColors = [
-    { border: 'border-valGold', text: 'text-valGold', badge: 'bg-valGold/20 text-valGold', num: '1' },
-    { border: 'border-valSilver', text: 'text-valSilver', badge: 'bg-valSilver/20 text-valSilver', num: '2' },
-    { border: 'border-valBronze', text: 'text-valBronze', badge: 'bg-valBronze/20 text-valBronze', num: '3' }
+    { border: 'border-valGold', badge: 'bg-valGold/20 text-valGold', num: '1' },
+    { border: 'border-valSilver', badge: 'bg-valSilver/20 text-valSilver', num: '2' },
+    { border: 'border-valBronze', badge: 'bg-valBronze/20 text-valBronze', num: '3' }
   ];
 
   top3.forEach((player, idx) => {
@@ -115,8 +126,9 @@ function renderPodium() {
 
     const wins = player.stats?.wins || 0;
     const losses = player.stats?.losses || 0;
-    const total = wins + losses || 1;
     const winRate = player.stats?.winRate || 0;
+
+    const cardImg = player.cardImage || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=100&q=80';
 
     card.innerHTML = `
       <div class="absolute -top-3 right-4 ${style.badge} font-black px-3 py-0.5 rounded-full text-xs border border-white/10">
@@ -125,7 +137,7 @@ function renderPodium() {
 
       <div>
         <div class="flex items-center space-x-4 mb-4">
-          <img src="${player.cardImage || 'https://via.placeholder.com/48'}" class="w-14 h-14 rounded-xl object-cover border border-white/20">
+          <img src="${cardImg}" class="w-12 h-12 rounded-xl object-cover border border-white/20 bg-gray-800">
           <div>
             <h3 class="text-xl font-black text-white leading-tight">${player.name}</h3>
             <div class="text-xs text-gray-400">#${player.tag}</div>
@@ -133,7 +145,7 @@ function renderPodium() {
         </div>
 
         <div class="flex items-center space-x-3 bg-black/40 p-3 rounded-xl mb-4 border border-white/5">
-          ${player.rankImage ? `<img src="${player.rankImage}" class="w-12 h-12">` : ''}
+          ${player.rankImage ? `<img src="${player.rankImage}" class="w-10 h-10">` : '<div class="w-10 h-10 bg-gray-700 rounded-full flex items-center justify-center text-xs font-bold text-gray-400">?</div>'}
           <div>
             <div class="text-sm font-extrabold text-white">${player.rank}</div>
             <div class="text-xs text-valRed font-bold">${player.rr} LP / RR</div>
@@ -143,9 +155,9 @@ function renderPodium() {
 
       <div>
         <div class="flex justify-between text-xs font-bold mb-1.5">
-          <span class="text-green-400">${wins}V</span>
+          <span class="text-green-400">${wins}W</span>
           <span class="text-white font-extrabold">${winRate}% WR</span>
-          <span class="text-red-400">${losses}D</span>
+          <span class="text-red-400">${losses}L</span>
         </div>
         <div class="w-full bg-red-500/30 h-2 rounded-full overflow-hidden flex">
           <div class="bg-green-500 h-full" style="width: ${winRate}%"></div>
@@ -158,10 +170,11 @@ function renderPodium() {
 
 function renderLeaderboardTable() {
   const tbody = document.getElementById('leaderboardBody');
+  if (!tbody) return;
   tbody.innerHTML = '';
 
   if (!appState.filteredPlayers.length) {
-    tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gray-500">No hay participantes registrados</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="py-8 text-center text-gray-500">No hay participantes cargados</td></tr>`;
     return;
   }
 
@@ -173,11 +186,12 @@ function renderLeaderboardTable() {
     const losses = player.stats?.losses || 0;
     const winRate = player.stats?.winRate || 0;
 
-    // Badges de historial reciente
     const streakHTML = player.matches && player.matches.length ? player.matches.slice(0, 5).map(m => {
       const isWin = m.result === 'Victoria';
       return `<span class="inline-block w-2.5 h-6 rounded-sm ${isWin ? 'bg-green-500' : 'bg-red-500'}" title="${m.map} - ${m.kills}/${m.deaths}/${m.assists}"></span>`;
     }).join('') : '<span class="text-xs text-gray-600">-</span>';
+
+    const cardImg = player.cardImage || 'https://images.unsplash.com/photo-1542751371-adc38448a05e?w=100&q=80';
 
     tr.innerHTML = `
       <td class="py-4 px-4 text-center font-black ${index < 3 ? 'text-valRed text-base' : 'text-gray-400'}">
@@ -185,7 +199,7 @@ function renderLeaderboardTable() {
       </td>
       <td class="py-4 px-4">
         <div class="flex items-center space-x-3">
-          <img src="${player.cardImage || 'https://via.placeholder.com/32'}" class="w-9 h-9 rounded-lg object-cover border border-white/10">
+          <img src="${cardImg}" class="w-9 h-9 rounded-lg object-cover border border-white/10 bg-gray-800">
           <div>
             <div class="font-bold text-white leading-tight">${player.name}</div>
             <div class="text-[11px] text-gray-400">#${player.tag}</div>
@@ -204,8 +218,8 @@ function renderLeaderboardTable() {
       <td class="py-4 px-4">
         <div class="w-48">
           <div class="flex justify-between text-[11px] font-bold mb-1">
-            <span class="text-green-400">${wins}V <span class="text-gray-400 text-[10px]">(${winRate}%)</span></span>
-            <span class="text-red-400">${losses}D</span>
+            <span class="text-green-400">${wins}W <span class="text-gray-400 text-[10px]">(${winRate}%)</span></span>
+            <span class="text-red-400">${losses}L</span>
           </div>
           <div class="w-full bg-red-500/40 h-1.5 rounded-full overflow-hidden flex">
             <div class="bg-green-500 h-full" style="width: ${winRate}%"></div>
