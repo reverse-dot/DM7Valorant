@@ -1,6 +1,6 @@
 let globalCache = null;
 let lastFetchTime = 0;
-const CACHE_DURATION_MS = 20 * 60 * 1000; // 15 minutos de caché
+const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutos de caché interno
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -8,10 +8,11 @@ export default async function handler(req, res) {
   const API_KEY = process.env.HENRIK_API_KEY;
 
   if (!API_KEY) {
-    return res.status(500).json({ error: 'Falta HENRIK_API_KEY' });
+    return res.status(500).json({ error: 'Falta HENRIK_API_KEY en variables de entorno' });
   }
 
   const now = Date.now();
+  // 1. Si existe caché en la memoria local del Serverless, responder de inmediato
   if (globalCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
     res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
     return res.status(200).json(globalCache);
@@ -34,7 +35,8 @@ export default async function handler(req, res) {
     let rankImage = '';
 
     try {
-      await sleep(1800);
+      // Pausa de 1.5 segundos entre consultas para respetar cuotas
+      await sleep(1500);
 
       const response = await fetch(
         `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
@@ -52,14 +54,14 @@ export default async function handler(req, res) {
 
         rank = currentData?.currenttierpatched || 'Sin Clasificar';
         rr = currentData?.ranking_in_tier || 0;
-        tier = currentData?.currenttier || 0; // Número de liga (ej: Diamante 3 = 20, Platino 3 = 17)
+        tier = currentData?.currenttier || 0; // Ejemplo: Platino 3 = 17, Diamante 3 = 20, Ascendente 1 = 21
         rankImage = currentData?.images?.small || '';
       }
     } catch (err) {
-      console.error(`Error procesando a ${p.name}:`, err);
+      console.error(`Error obteniendo datos para ${p.name}:`, err);
     }
 
-    // Calculamos el ELO combinando la Liga (tier * 100) + RR
+    // Calculamos el ELO real: (Tier * 100) + RR
     const elo = (tier * 100) + rr;
 
     results.push({
@@ -75,9 +77,11 @@ export default async function handler(req, res) {
     });
   }
 
+  // Guardar respuesta en caché
   globalCache = { updatedAt: new Date().toISOString(), players: results };
   lastFetchTime = now;
 
+  // Header de caché para que la CDN Edge de Vercel tampoco sature la API
   res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
   return res.status(200).json(globalCache);
 }
