@@ -1,7 +1,6 @@
-// Caché en memoria para evitar llamadas repetidas durante 10 minutos
 let globalCache = null;
 let lastFetchTime = 0;
-const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutos
+const CACHE_DURATION_MS = 15 * 60 * 1000; // Guardar en caché por 15 minutos
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -12,10 +11,10 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: 'Falta HENRIK_API_KEY' });
   }
 
-  // 1. Si los datos en caché están vigentes, los entregamos inmediatamente
   const now = Date.now();
+  // Si ya tenemos datos guardados de hace menos de 15 min, responder con eso de inmediato
   if (globalCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
-    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=300');
+    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
     return res.status(200).json(globalCache);
   }
 
@@ -35,16 +34,21 @@ export default async function handler(req, res) {
     let rankImage = '';
 
     try {
-      // Retardo de 1.2 segundos entre cada jugador para respetar los límites
-      await sleep(1200);
+      // 1.8 segundos de pausa estricta entre cada jugador
+      await sleep(1800);
 
-      const mmrRes = await fetch(
+      const response = await fetch(
         `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
-        { headers: { 'Authorization': API_KEY } }
+        { 
+          headers: { 
+            'Authorization': API_KEY,
+            'User-Agent': 'SoloQChallenge/1.0'
+          } 
+        }
       );
 
-      if (mmrRes.ok) {
-        const mmrData = await mmrRes.json();
+      if (response.ok) {
+        const mmrData = await response.json();
         const currentData = mmrData.data?.current_data;
 
         rank = currentData?.currenttierpatched || 'Sin Clasificar';
@@ -52,7 +56,7 @@ export default async function handler(req, res) {
         rankImage = currentData?.images?.small || '';
       }
     } catch (err) {
-      console.error(`Error consultando a ${p.name}:`, err);
+      console.error(`Error procesando a ${p.name}:`, err);
     }
 
     results.push({
@@ -66,14 +70,10 @@ export default async function handler(req, res) {
     });
   }
 
-  // Verificar si obtuvimos al menos 1 resultado válido
-  const hasData = results.some(p => p.rr > 0 || p.rank !== 'Sin Clasificar');
+  // Si se obtuvieron datos válidos, guardamos en la memoria global de Vercel
+  globalCache = { updatedAt: new Date().toISOString(), players: results };
+  lastFetchTime = now;
 
-  if (hasData || !globalCache) {
-    globalCache = { updatedAt: new Date().toISOString(), players: results };
-    lastFetchTime = now;
-  }
-
-  res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=300');
+  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
   return res.status(200).json(globalCache);
 }
