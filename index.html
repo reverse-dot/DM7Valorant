@@ -111,45 +111,63 @@ function renderMatchesBadge(matches) {
     return `<span class="text-xs text-dim italic">sin partidas</span>`;
   }
 
-  let points = [];
-  let currentY = 20;
+  const svgWidth = 90;
+  const svgHeight = 32;
+  const paddingX = 5;
+  const paddingY = 6;
+  const usableWidth = svgWidth - (paddingX * 2);
   const total = matches.length;
-  const xStep = total > 1 ? 90 / (total - 1) : 0;
+  const stepX = total > 1 ? usableWidth / (total - 1) : 0;
 
-  matches.forEach((game, index) => {
-    if (game.won || game.result === 'Victoria') currentY -= 7;
-    else currentY += 7;
-    currentY = Math.max(5, Math.min(35, currentY));
-    points.push(`${5 + index * xStep},${currentY}`);
+  let wins = 0;
+  let losses = 0;
+
+  // 1. Calcular trayectoria de victorias / derrotas
+  let currY = 16;
+  let points = [{ x: paddingX, y: currY }];
+
+  matches.forEach((m, idx) => {
+    const isWin = m.won || m.result === 'Victoria';
+    if (isWin) wins++; else losses++;
+
+    if (idx > 0) {
+      currY += isWin ? -5 : 5; // Sube si gana, baja si pierde
+      currY = Math.max(paddingY, Math.min(svgHeight - paddingY, currY));
+      points.push({ x: paddingX + idx * stepX, y: currY });
+    }
   });
 
-  const lastGameWon = matches[matches.length - 1]?.won || matches[matches.length - 1]?.result === 'Victoria';
-  const strokeColor = lastGameWon ? '#38c98e' : '#ef5761';
+  // 2. Determinar si la tendencia global es Verde (Positiva) o Roja (Negativa)
+  const isPositive = wins >= losses;
+  const color = isPositive ? '#38c98e' : '#ef5761';
+  const gradientId = `grad-${Math.random().toString(36).substr(2, 7)}`;
 
-  const barsHTML = matches.map(m => {
-    const isWin = m.won || m.result === 'Victoria';
-    const bg = isWin ? 'rgba(56, 201, 142, 0.25)' : 'rgba(239, 87, 97, 0.25)';
-    const border = isWin ? '#38c98e' : '#ef5761';
-
-    return `
-      <div title="${m.map || 'Competitivo'} - ${isWin ? 'Victoria' : 'Derrota'}" 
-           style="width: 14px; height: 28px; background: ${bg}; border: 1px solid ${border}; border-radius: 4px; z-index: 10;">
-      </div>
-    `;
-  }).join('');
+  // 3. Puntos para la línea y el área sombreada
+  const polylinePoints = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const firstP = points[0];
+  const lastP = points[points.length - 1];
+  const areaPoints = `${firstP.x.toFixed(1)},${svgHeight} ${polylinePoints} ${lastP.x.toFixed(1)},${svgHeight}`;
 
   return `
-    <div style="position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; background: rgba(0,0,0,0.45); border-radius: 8px; border: 1px solid #1e1e27;">
-      ${barsHTML}
-      <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20;">
+    <div class="inline-flex items-center justify-center px-2 py-1 bg-black/40 rounded-lg border border-line" title="${wins}V - ${losses}D (${matches.length} partidas)">
+      <svg width="${svgWidth}" height="${svgHeight}" style="overflow: visible;">
+        <defs>
+          <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.4" />
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.0" />
+          </linearGradient>
+        </defs>
+        <polygon points="${areaPoints}" fill="url(#${gradientId})" />
         <polyline
           fill="none"
-          stroke="${strokeColor}"
-          stroke-width="2.5"
+          stroke="${color}"
+          stroke-width="2"
           stroke-linecap="round"
           stroke-linejoin="round"
-          points="${points.join(' ')}"
+          points="${polylinePoints}"
+          style="filter: drop-shadow(0px 0px 3px ${color}80);"
         />
+        <circle cx="${lastP.x.toFixed(1)}" cy="${lastP.y.toFixed(1)}" r="3" fill="${color}" stroke="#08080b" stroke-width="1.5" />
       </svg>
     </div>
   `;
