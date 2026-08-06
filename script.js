@@ -162,6 +162,7 @@ function renderPodium() {
         <div class="w-full bg-red-500/30 h-2 rounded-full overflow-hidden flex">
           <div class="bg-green-500 h-full" style="width: ${winRate}%"></div>
         </div>
+        ${player.act ? `<div class="text-[10px] text-gray-500 mt-1 text-right">Acto ${player.act}</div>` : ''}
       </div>
     `;
     podiumContainer.appendChild(card);
@@ -224,6 +225,7 @@ function renderLeaderboardTable() {
           <div class="w-full bg-red-500/40 h-1.5 rounded-full overflow-hidden flex">
             <div class="bg-green-500 h-full" style="width: ${winRate}%"></div>
           </div>
+          ${player.act ? `<div class="text-[9px] text-gray-500 mt-0.5">Acto ${player.act}</div>` : ''}
         </div>
       </td>
       <td class="py-4 px-4 text-center font-bold ${player.stats?.kd >= 1 ? 'text-green-400' : 'text-red-400'}">
