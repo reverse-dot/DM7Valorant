@@ -1,40 +1,54 @@
-let globalCache = null;
+// Extiende el timeout de la función en Vercel (si tu plan lo permite) para que no la maten a mitad de camino
+export const config = { maxDuration: 60 };
+
+let globalCache = null;       // Último resultado bueno (se sirve aunque esté algo vencido)
 let lastFetchTime = 0;
-const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutos de caché para proteger tu cuota
+let inFlightPromise = null;   // Candado: evita que la MISMA instancia dispare 2 refrescos a la vez
+
+const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 min: dentro de esta ventana, se sirve el caché sin tocar la API
+const MAX_STALE_MS = 2 * 60 * 60 * 1000;  // Hasta 2h de caché vencido se sigue mostrando ante error/reintento
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function fetchWithRetry(url, headers, retries = 1) {
+// Espera entre cada llamada individual a Henrik, para no saturar aunque sea 1 sola persona
+const DELAY_BETWEEN_CALLS_MS = 3000;
+
+// Icono de rango: se arma directo con la URL pública de valorant-api.com, sin gastar
+// una llamada extra a Henrik solo para traer la imagen.
+const TIER_CONTENT_ID = '03621f52-342b-cf4e-4f86-9350a49c6d04';
+function rankImageFromTier(tierId) {
+  if (!tierId) return '';
+  return `https://media.valorant-api.com/competitivetiers/${TIER_CONTENT_ID}/${tierId}/smallicon.png`;
+}
+
+async function fetchWithRetry(url, headers, retries = 4) {
   for (let i = 0; i <= retries; i++) {
-    const res = await fetch(url, { headers });
-    if (res.status !== 429) return res;
-    // Si da 429, esperamos 3.5 segundos antes de reintentar
-    await sleep(3500);
+    try {
+      const res = await fetch(url, { headers });
+      if (res.status !== 429) return res;
+
+      // Backoff exponencial ante 429: 5s, 10s, 20s, 40s...
+      const wait = 5000 * Math.pow(2, i);
+      console.warn(`429 recibido en ${url}, reintentando en ${wait}ms (intento ${i + 1}/${retries + 1})`);
+      await sleep(wait);
+    } catch (err) {
+      console.error('Error de red al llamar a Henrik:', err.message);
+      await sleep(2000);
+    }
   }
   return null;
 }
 
-export default async function handler(req, res) {
-  const API_KEY = process.env.HENRIK_API_KEY;
+const players = [
+  { name: 'X1no', tag: 'DM7', region: 'latam' },
+  { name: 'Xrosfire', tag: '4884', region: 'latam' },
+  { name: 'zingCL', tag: 'DM7', region: 'latam' },
+  { name: 'pavliuchenko', tag: '7144', region: 'latam' },
+  { name: 'sayaplayer', tag: '9243', region: 'latam' }
+];
 
-  if (!API_KEY) {
-    return res.status(500).json({ error: 'Falta HENRIK_API_KEY' });
-  }
-
-  const now = Date.now();
-  if (globalCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
-    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
-    return res.status(200).json(globalCache);
-  }
-
-  const players = [
-    { name: 'X1no', tag: 'DM7', region: 'latam' },
-    { name: 'Xrosfire', tag: '4884', region: 'latam' },
-    { name: 'zingCL', tag: 'DM7', region: 'latam' },
-    { name: 'pavliuchenko', tag: '7144', region: 'latam' },
-    { name: 'sayaplayer', tag: '9243', region: 'latam' }
-  ];
-
+// Hace TODO el trabajo pesado: recorre jugadores UNO POR UNO, con pausas entre cada llamada.
+async function buildStats(API_KEY) {
   const results = [];
   const reqHeaders = { 'Authorization': API_KEY, 'User-Agent': 'SoloQChallenge/1.0' };
 
@@ -56,8 +70,8 @@ export default async function handler(req, res) {
     let matchesHistory = [];
 
     try {
-      // 1. Obtener MMR (Rango, RR y Récord del Acto actual) - v3, incluye "seasonal"
-      await sleep(2200);
+      // 1. MMR v3: Rango, RR y récord del ACTO ACTUAL (wins/games totales, no solo las últimas 5)
+      await sleep(DELAY_BETWEEN_CALLS_MS);
       const mmrRes = await fetchWithRetry(
         `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
         reqHeaders
@@ -69,8 +83,8 @@ export default async function handler(req, res) {
         rank = currentData?.tier?.name || 'Sin Clasificar';
         rr = currentData?.rr || 0;
         tier = currentData?.tier?.id || 0;
+        rankImage = rankImageFromTier(tier); // sin llamada extra a Henrik
 
-        // El acto actual es el último elemento del array "seasonal"
         const seasonal = mmrData.data?.seasonal || [];
         const currentAct = seasonal[seasonal.length - 1];
 
@@ -80,22 +94,12 @@ export default async function handler(req, res) {
           losses = totalActGames - wins;
           currentActShort = currentAct.season?.short || '';
         }
+      } else {
+        console.error(`MMR v3 falló para ${p.name} (status ${mmrRes?.status})`);
       }
 
-      // 1b. La v3 no trae el ícono del rango, lo pedimos con la v2 (solo para la imagen)
-      await sleep(2200);
-      const mmrImgRes = await fetchWithRetry(
-        `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
-        reqHeaders
-      );
-
-      if (mmrImgRes && mmrImgRes.ok) {
-        const mmrImgData = await mmrImgRes.json();
-        rankImage = mmrImgData.data?.current_data?.images?.small || '';
-      }
-
-      // 2. Obtener Historial de Partidas
-      await sleep(2200);
+      // 2. Historial de partidas (para el sparkline / últimas partidas, no para el V/D total)
+      await sleep(DELAY_BETWEEN_CALLS_MS);
       const matchesRes = await fetchWithRetry(
         `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?filter=competitive`,
         reqHeaders
@@ -104,8 +108,6 @@ export default async function handler(req, res) {
       if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
         const rawMatches = matchesData.data || [];
-
-        // Tomar las últimas 5 partidas y procesarlas
         const recentMatches = rawMatches.slice(0, 5).reverse();
 
         recentMatches.forEach((m) => {
@@ -117,9 +119,6 @@ export default async function handler(req, res) {
             const playerTeam = playerObj.team?.toLowerCase();
             const redWon = m.teams?.red?.has_won;
             const blueWon = m.teams?.blue?.has_won;
-
-            // Nota: wins/losses YA NO se cuentan acá (eso viene del total del acto vía MMR v3).
-            // Esto solo se usa para marcar victoria/derrota en el detalle de la última partida.
             const won = (playerTeam === 'red' && redWon) || (playerTeam === 'blue' && blueWon);
 
             const k = playerObj.stats?.kills || 0;
@@ -178,9 +177,76 @@ export default async function handler(req, res) {
     });
   }
 
-  globalCache = { updatedAt: new Date().toISOString(), players: results };
-  lastFetchTime = now;
+  return { updatedAt: new Date().toISOString(), players: results };
+}
 
-  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
-  return res.status(200).json(globalCache);
+// Dispara un refresh en segundo plano, protegido por el candado de esta instancia.
+// No hay que esperarlo: el usuario ya recibió una respuesta (caché fresco o vencido).
+function triggerBackgroundRefresh(API_KEY) {
+  if (inFlightPromise) return; // ya hay uno corriendo en esta instancia, no dupliques
+
+  inFlightPromise = buildStats(API_KEY)
+    .then((data) => {
+      globalCache = data;
+      lastFetchTime = Date.now();
+    })
+    .catch((err) => {
+      console.error('Fallo el refresh en background:', err);
+    })
+    .finally(() => {
+      inFlightPromise = null;
+    });
+}
+
+export default async function handler(req, res) {
+  const API_KEY = process.env.HENRIK_API_KEY;
+
+  if (!API_KEY) {
+    return res.status(500).json({ error: 'Falta HENRIK_API_KEY' });
+  }
+
+  const now = Date.now();
+
+  // 1. Caché fresco (< 15 min): se devuelve al toque.
+  if (globalCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
+    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
+    return res.status(200).json(globalCache);
+  }
+
+  // 2. Caché vencido pero existe: se devuelve YA MISMO (el usuario no espera nada),
+  //    y se dispara un refresh en segundo plano para la próxima visita.
+  //    Esto es clave: nadie tiene que esperar ~40s ni recargar la página por impaciencia,
+  //    que era justo lo que generaba pedidos duplicados y saturaba la API.
+  if (globalCache) {
+    triggerBackgroundRefresh(API_KEY);
+    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
+    return res.status(200).json(globalCache);
+  }
+
+  // 3. No hay NINGÚN caché todavía (primera vez tras un deploy): acá sí hay que esperar,
+  //    porque no hay nada que mostrar. Si ya hay un refresh en curso en esta instancia,
+  //    nos enganchamos a esa misma promesa en vez de disparar uno nuevo.
+  if (!inFlightPromise) {
+    inFlightPromise = buildStats(API_KEY)
+      .then((data) => {
+        globalCache = data;
+        lastFetchTime = Date.now();
+        return data;
+      })
+      .finally(() => {
+        inFlightPromise = null;
+      });
+  }
+
+  try {
+    const freshData = await inFlightPromise;
+    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
+    return res.status(200).json(freshData || globalCache);
+  } catch (err) {
+    console.error('Fallo total al construir stats:', err);
+    if (globalCache && (Date.now() - lastFetchTime < MAX_STALE_MS)) {
+      return res.status(200).json(globalCache);
+    }
+    return res.status(502).json({ error: 'No se pudo obtener datos de Henrik API. Probá de nuevo en un minuto.' });
+  }
 }
