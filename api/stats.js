@@ -1,6 +1,6 @@
 let globalCache = null;
 let lastFetchTime = 0;
-const CACHE_DURATION_MS = 15 * 60 * 1000; // Guardar en caché por 15 minutos
+const CACHE_DURATION_MS = 15 * 60 * 1000; // Caché de 15 minutos en Vercel
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -8,11 +8,10 @@ export default async function handler(req, res) {
   const API_KEY = process.env.HENRIK_API_KEY;
 
   if (!API_KEY) {
-    return res.status(500).json({ error: 'Falta HENRIK_API_KEY' });
+    return res.status(500).json({ error: 'Falta HENRIK_API_KEY en las variables de entorno de Vercel' });
   }
 
   const now = Date.now();
-  // Si ya tenemos datos guardados de hace menos de 15 min, responder con eso de inmediato
   if (globalCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
     res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
     return res.status(200).json(globalCache);
@@ -32,12 +31,19 @@ export default async function handler(req, res) {
     let rank = 'Sin Clasificar';
     let rr = 0;
     let rankImage = '';
+    
+    let wins = 0;
+    let losses = 0;
+    let totalKills = 0;
+    let totalDeaths = 0;
+    let totalHeadshots = 0;
+    let totalShots = 0;
+    let matchesHistory = [];
 
     try {
-      // 1.8 segundos de pausa estricta entre cada jugador
-      await sleep(1800);
-
-      const response = await fetch(
+      // 1. Consulta MMR / Rango
+      await sleep(1200);
+      const mmrResponse = await fetch(
         `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
         { 
           headers: { 
@@ -47,17 +53,78 @@ export default async function handler(req, res) {
         }
       );
 
-      if (response.ok) {
-        const mmrData = await response.json();
+      if (mmrResponse.ok) {
+        const mmrData = await mmrResponse.json();
         const currentData = mmrData.data?.current_data;
 
         rank = currentData?.currenttierpatched || 'Sin Clasificar';
         rr = currentData?.ranking_in_tier || 0;
         rankImage = currentData?.images?.small || '';
       }
+
+      // 2. Consulta de Partidas recientes
+      await sleep(1200);
+      const matchesResponse = await fetch(
+        `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?filter=competitive&size=5`,
+        { 
+          headers: { 
+            'Authorization': API_KEY,
+            'User-Agent': 'SoloQChallenge/1.0'
+          } 
+        }
+      );
+
+      if (matchesResponse.ok) {
+        const matchesData = await matchesResponse.json();
+        const matchesList = matchesData.data || [];
+
+        matchesList.forEach(m => {
+          const allPlayers = m.players?.all_players || [];
+          const playerStats = allPlayers.find(
+            pl => pl.name?.toLowerCase() === p.name.toLowerCase() && pl.tag?.toLowerCase() === p.tag.toLowerCase()
+          );
+
+          if (playerStats) {
+            const teamColor = playerStats.team?.toLowerCase();
+            const myTeam = m.teams?.[teamColor];
+            const hasWon = myTeam?.has_won || false;
+
+            if (hasWon) wins++;
+            else losses++;
+
+            const st = playerStats.stats || {};
+            const k = st.kills || 0;
+            const d = st.deaths || 0;
+            const a = st.assists || 0;
+            const hs = st.headshots || 0;
+            const bs = st.bodyshots || 0;
+            const ls = st.legshots || 0;
+
+            totalKills += k;
+            totalDeaths += d;
+            totalHeadshots += hs;
+            totalShots += (hs + bs + ls);
+
+            const matchKda = d > 0 ? ((k + a) / d).toFixed(2) : (k + a).toFixed(2);
+
+            matchesHistory.push({
+              result: hasWon ? 'Victoria' : 'Derrota',
+              won: hasWon,
+              map: m.metadata?.map || 'Competitivo',
+              kda: matchKda
+            });
+          }
+        });
+      }
+
     } catch (err) {
       console.error(`Error procesando a ${p.name}:`, err);
     }
+
+    const totalMatches = wins + losses;
+    const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
+    const kdRatio = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : totalKills.toFixed(2);
+    const headshotPct = totalShots > 0 ? Math.round((totalHeadshots / totalShots) * 100) : 0;
 
     results.push({
       name: p.name,
@@ -65,12 +132,18 @@ export default async function handler(req, res) {
       rank,
       rr,
       rankImage,
-      stats: { wins: 0, losses: 0, totalMatches: 0, winRate: 0, kd: '0.00', headshotPct: 0 },
-      matches: []
+      stats: { 
+        wins, 
+        losses, 
+        totalMatches, 
+        winRate, 
+        kd: kdRatio, 
+        headshotPct 
+      },
+      matches: matchesHistory.reverse() // Cronológico para el gráfico
     });
   }
 
-  // Si se obtuvieron datos válidos, guardamos en la memoria global de Vercel
   globalCache = { updatedAt: new Date().toISOString(), players: results };
   lastFetchTime = now;
 
