@@ -1,8 +1,18 @@
 let globalCache = null;
 let lastFetchTime = 0;
-const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutos de caché para proteger la API
+const CACHE_DURATION_MS = 15 * 60 * 1000; // 15 minutos de caché para proteger tu cuota
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fetchWithRetry(url, headers, retries = 1) {
+  for (let i = 0; i <= retries; i++) {
+    const res = await fetch(url, { headers });
+    if (res.status !== 429) return res;
+    // Si da 429, esperamos 3.5 segundos antes de reintentar
+    await sleep(3500);
+  }
+  return null;
+}
 
 export default async function handler(req, res) {
   const API_KEY = process.env.HENRIK_API_KEY;
@@ -26,6 +36,7 @@ export default async function handler(req, res) {
   ];
 
   const results = [];
+  const reqHeaders = { 'Authorization': API_KEY, 'User-Agent': 'SoloQChallenge/1.0' };
 
   for (const p of players) {
     let rank = 'Sin Clasificar';
@@ -44,13 +55,13 @@ export default async function handler(req, res) {
 
     try {
       // 1. Obtener MMR (Rango y RR)
-      await sleep(1200); // Pausa de 1.2 segundos entre consultas
-      const mmrRes = await fetch(
+      await sleep(2200);
+      const mmrRes = await fetchWithRetry(
         `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
-        { headers: { 'Authorization': API_KEY, 'User-Agent': 'SoloQChallenge/1.0' } }
+        reqHeaders
       );
 
-      if (mmrRes.ok) {
+      if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
         const currentData = mmrData.data?.current_data;
         rank = currentData?.currenttierpatched || 'Sin Clasificar';
@@ -60,21 +71,20 @@ export default async function handler(req, res) {
       }
 
       // 2. Obtener Historial de Partidas
-      await sleep(1200); // Pausa de 1.2 segundos para no saturar
-      const matchesRes = await fetch(
+      await sleep(2200);
+      const matchesRes = await fetchWithRetry(
         `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?filter=competitive`,
-        { headers: { 'Authorization': API_KEY, 'User-Agent': 'SoloQChallenge/1.0' } }
+        reqHeaders
       );
 
-      if (matchesRes.ok) {
+      if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
         const rawMatches = matchesData.data || [];
 
-        // Procesar las últimas 5 partidas competitivas
+        // Tomar las últimas 5 partidas y procesarlas
         const recentMatches = rawMatches.slice(0, 5).reverse();
 
         recentMatches.forEach((m) => {
-          // Buscar al jugador en los participantes de la partida
           const playerObj = m.players?.all_players?.find(
             (pl) => pl.name.toLowerCase() === p.name.toLowerCase() && pl.tag.toLowerCase() === p.tag.toLowerCase()
           );
@@ -113,7 +123,6 @@ export default async function handler(req, res) {
       console.error(`Error al procesar datos para ${p.name}:`, err);
     }
 
-    // Cálculos estadísticos finales
     const totalMatches = wins + losses;
     const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
     const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : (totalKills > 0 ? totalKills.toFixed(2) : '0.00');
