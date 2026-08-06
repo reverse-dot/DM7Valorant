@@ -1,6 +1,7 @@
 let globalCache = null;
 let lastFetchTime = 0;
-const CACHE_DURATION_MS = 15 * 60 * 1000; // Caché de 15 minutos en Vercel
+// Aumentamos a 20 minutos de caché para proteger aún más la cuota de la API
+const CACHE_DURATION_MS = 20 * 60 * 1000; 
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -13,16 +14,23 @@ export default async function handler(req, res) {
 
   const now = Date.now();
   if (globalCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
-    res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
+    res.setHeader('Cache-Control', 's-maxage=1200, stale-while-revalidate=300');
     return res.status(200).json(globalCache);
   }
 
+  // LISTA DE 10 JUGADORES (Agrega aquí a los nuevos 5 cuando los tengas)
   const players = [
     { name: 'X1no', tag: 'DM7', region: 'latam' },
     { name: 'Xrosfire', tag: '4884', region: 'latam' },
     { name: 'zingCL', tag: 'DM7', region: 'latam' },
     { name: 'pavliuchenko', tag: '7144', region: 'latam' },
-    { name: 'sayaplayer', tag: '9243', region: 'latam' }
+    { name: 'sayaplayer', tag: '9243', region: 'latam' },
+    // --- Próximos Integrantes ---
+    // { name: 'Jugador6', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador7', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador8', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador9', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador10', tag: 'TAG', region: 'latam' }
   ];
 
   const results = [];
@@ -41,8 +49,8 @@ export default async function handler(req, res) {
     let matchesHistory = [];
 
     try {
-      // 1. Consulta MMR / Rango
-      await sleep(1200);
+      // 1. Obtener MMR / Rango
+      await sleep(1500);
       const mmrResponse = await fetch(
         `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
         { 
@@ -62,8 +70,8 @@ export default async function handler(req, res) {
         rankImage = currentData?.images?.small || '';
       }
 
-      // 2. Consulta de Partidas recientes
-      await sleep(1200);
+      // 2. Obtener Historial de Partidas
+      await sleep(1500);
       const matchesResponse = await fetch(
         `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?filter=competitive&size=5`,
         { 
@@ -140,13 +148,13 @@ export default async function handler(req, res) {
         kd: kdRatio, 
         headshotPct 
       },
-      matches: matchesHistory.reverse() // Cronológico para el gráfico
+      matches: matchesHistory.reverse()
     });
   }
 
   globalCache = { updatedAt: new Date().toISOString(), players: results };
   lastFetchTime = now;
 
-  res.setHeader('Cache-Control', 's-maxage=900, stale-while-revalidate=300');
+  res.setHeader('Cache-Control', 's-maxage=1200, stale-while-revalidate=300');
   return res.status(200).json(globalCache);
 }
