@@ -1,51 +1,408 @@
-// 1. Datos de Cuenta
-const accountUrl = `https://api.henrikdev.xyz/valorant/v1/account/${encodedName}/${encodedTag}`;
-const accountRes = await fetch(accountUrl, { headers });
-await delay(250);
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>SoloQ Challenge · Valorant</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: { sans: ['"Montserrat"', 'sans-serif'] },
+        colors: {
+          bg: '#08080b', panel: '#0f0f15', panel2: '#131319', line: '#1e1e27',
+          ink: '#f2f2f5', dim: '#8b8b96',
+          gold: '#f2c14e', silver: '#c7d0da', bronze: '#d9884b',
+          purple: '#8b6ef2', win: '#38c98e', loss: '#ef5761',
+        },
+        keyframes: {
+          glow: { '0%,100%': { opacity: 0.6 }, '50%': { opacity: 1 } },
+        },
+        animation: {
+          glow: 'glow 3.5s ease-in-out infinite',
+        },
+      },
+    },
+  };
+</script>
+</head>
+<body
+  class="min-h-screen font-sans text-ink px-5 pt-7 pb-16 bg-cover bg-center bg-fixed"
+  style="
+    background-color: #08080b;
+    background-image: url('https://soloqchallenge.gg/assets/bg_home-GdTbtqNt.webp');
+  ">
+<div class="max-w-[1180px] mx-auto">
 
-if (!accountRes.ok) continue;
-const accountData = await accountRes.json();
-const account = accountData.data;
-if (!account) continue;
+  <header class="flex items-end justify-between flex-wrap gap-4 mb-8 pb-5 border-b border-line">
+    <div>
+      <div class="text-[11px] tracking-[3px] text-purple uppercase mb-1.5 font-semibold">Valorant · LAS Competitive Grind</div>
+      <h1 id="titleText" class="font-bold text-[42px] tracking-[0.5px] leading-none">SoloQ Challenge</h1>
+      <div class="text-white/55 text-[13px] mt-2 font-bold">Última actualización: <span id="lastUpdate">—</span></div>
+    </div>
+    <div class="bg-zinc-800/10 backdrop-blur-m border border-line rounded-[10px] px-[18px] py-3 text-center">
+      <div class="text-[10px] tracking-[2px] text-dim">EL CHALLENGE TERMINA EN</div>
+      <div class="text-[22px] font-bold text-gold mt-0.5" id="countdownVal">--:--:--</div>
+    </div>
+  </header>
 
-// Intentar primero con la región devuelta por la cuenta
-let region = account.region || 'na';
-let mmrData = null;
+  <div id="podium" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-9"></div>
 
-// Función rápida para consultar MMR por región
-async function fetchMMR(targetRegion, puuid) {
-  const url = `https://api.henrikdev.xyz/valorant/v2/by-puuid/mmr/${targetRegion}/${puuid}`;
-  const res = await fetch(url, { headers });
-  if (res.ok) {
-    const data = await res.json();
-    if (data?.data?.current_data?.currenttierpatched) {
-      return data;
-    }
-  }
-  return null;
-}
+  <div class="rounded-xl overflow-hidden overflow-x-auto border border-line bg-panel/80 backdrop-blur-md">
+    <table id="table" class="w-full border-collapse min-w-[850px]" style="display:none;">
+      <thead>
+        <tr class="border-b border-line">
+          <th class="text-left text-[11px] tracking-[1.5px] text-dim px-4 py-3.5 whitespace-nowrap font-bold">#</th>
+          <th class="px-4 py-3.5 text-left">
+            <button class="flex items-center gap-2 group" onclick="setSort('jugador')">
+              <span class="text-[11px] tracking-[1.5px] text-dim font-bold">Jugador</span>
+              <span class="flex flex-col leading-none">
+                <svg class="w-2.5 h-2 sort-arrow text-dim group-hover:text-white transition" data-key="jugador" data-dir="asc" viewBox="0 0 10 6"><path fill="currentColor" d="M5 0L10 6H0z"/></svg>
+                <svg class="w-2.5 h-2 -mt-[1px] sort-arrow text-dim group-hover:text-white transition" data-key="jugador" data-dir="desc" viewBox="0 0 10 6"><path fill="currentColor" d="M0 0h10L5 6z"/></svg>
+              </span>
+            </button>
+          </th>
+          <th class="px-4 py-3.5 text-left">
+            <button class="flex items-center gap-2 group" onclick="setSort('elo')">
+              <span class="text-[11px] tracking-[1.5px] text-dim font-bold">Rango / ELO</span>
+              <span class="flex flex-col leading-none">
+                <svg class="w-2.5 h-2 sort-arrow text-dim group-hover:text-white transition" data-key="elo" data-dir="asc" viewBox="0 0 10 6"><path fill="currentColor" d="M5 0L10 6H0z"/></svg>
+                <svg class="w-2.5 h-2 -mt-[1px] sort-arrow text-dim group-hover:text-white transition" data-key="elo" data-dir="desc" viewBox="0 0 10 6"><path fill="currentColor" d="M0 0h10L5 6z"/></svg>
+              </span>
+            </button>
+          </th>
+          <th class="px-4 py-3.5 text-left">
+            <button class="flex items-center gap-2 group" onclick="setSort('vd')">
+              <span class="text-[11px] tracking-[1.5px] text-dim font-bold">V / D (Winrate)</span>
+              <span class="flex flex-col leading-none">
+                <svg class="w-2.5 h-2 sort-arrow text-dim group-hover:text-white transition" data-key="vd" data-dir="asc" viewBox="0 0 10 6"><path fill="currentColor" d="M5 0L10 6H0z"/></svg>
+                <svg class="w-2.5 h-2 -mt-[1px] sort-arrow text-dim group-hover:text-white transition" data-key="vd" data-dir="desc" viewBox="0 0 10 6"><path fill="currentColor" d="M0 0h10L5 6z"/></svg>
+              </span>
+            </button>
+          </th>
+          <th class="px-4 py-3.5 text-left">
+            <button class="flex items-center gap-2 group" onclick="setSort('kd')">
+              <span class="text-[11px] tracking-[1.5px] text-dim font-bold">K/D</span>
+              <span class="flex flex-col leading-none">
+                <svg class="w-2.5 h-2 sort-arrow text-dim group-hover:text-white transition" data-key="kd" data-dir="asc" viewBox="0 0 10 6"><path fill="currentColor" d="M5 0L10 6H0z"/></svg>
+                <svg class="w-2.5 h-2 -mt-[1px] sort-arrow text-dim group-hover:text-white transition" data-key="kd" data-dir="desc" viewBox="0 0 10 6"><path fill="currentColor" d="M0 0h10L5 6z"/></svg>
+              </span>
+            </button>
+          </th>
+          <th class="px-4 py-3.5 text-left">
+            <button class="flex items-center gap-2 group" onclick="setSort('hs')">
+              <span class="text-[11px] tracking-[1.5px] text-dim font-bold">HS %</span>
+              <span class="flex flex-col leading-none">
+                <svg class="w-2.5 h-2 sort-arrow text-dim group-hover:text-white transition" data-key="hs" data-dir="asc" viewBox="0 0 10 6"><path fill="currentColor" d="M5 0L10 6H0z"/></svg>
+                <svg class="w-2.5 h-2 -mt-[1px] sort-arrow text-dim group-hover:text-white transition" data-key="hs" data-dir="desc" viewBox="0 0 10 6"><path fill="currentColor" d="M0 0h10L5 6z"/></svg>
+              </span>
+            </button>
+          </th>
+          <th class="px-4 py-3.5 text-left">
+            <span class="text-[11px] tracking-[1.5px] text-dim font-bold">Últimas Partidas</span>
+          </th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
 
-// 1er Intento: Región detectada por Riot
-mmrData = await fetchMMR(region, account.puuid);
+  <div id="emptyState" class="text-center py-16 px-5 text-dim">
+    <b class="block text-ink font-bold text-lg mb-1.5">Cargando ranking de Valorant...</b>
+  </div>
 
-// 2do Intento (Fallback para cambio de servidor): Si no encontró rango, probar regiones alternativas
-if (!mmrData) {
-  const fallbackRegions = ['latam', 'na', 'br', 'eu'].filter(r => r !== region);
-  for (const altRegion of fallbackRegions) {
-    await delay(200);
-    const altData = await fetchMMR(altRegion, account.puuid);
-    if (altData) {
-      mmrData = altData;
-      region = altRegion; // Actualizamos la región correcta para traer sus partidas
+</div>
+
+<script>
+let deadline = "2026-08-31T23:59:59Z"; // Fecha límite opcional del torneo
+
+// Orden y puntuación de rangos en Valorant
+const VALORANT_RANKS = {
+  'iron': 0, 'hierro': 0,
+  'bronze': 1, 'bronce': 1,
+  'silver': 2, 'plata': 2,
+  'gold': 3, 'oro': 3,
+  'platinum': 4, 'platino': 4,
+  'diamond': 5, 'diamante': 5,
+  'ascendant': 6, 'ascendente': 6,
+  'immortal': 7, 'inmortal': 7,
+  'radiant': 8, 'radiante': 8
+};
+
+function eloScore(p) {
+  const rankStr = (p.rank || '').toLowerCase();
+  let baseTier = 0;
+  let division = 0;
+
+  for (const [key, value] of Object.entries(VALORANT_RANKS)) {
+    if (rankStr.includes(key)) {
+      baseTier = value;
       break;
     }
   }
+
+  const matchNum = rankStr.match(/\d+/);
+  if (matchNum) {
+    division = parseInt(matchNum[0]);
+  }
+
+  return (baseTier * 1000) + (division * 100) + (p.rr || 0);
 }
 
-// Extraer el rango encontrado
-const currentData = mmrData?.data?.current_data || {};
-const highestData = mmrData?.data?.highest_rank || {};
+function initials(name) { return (name || '?').trim().slice(0, 2).toUpperCase(); }
+function escapeHtml(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 
-let currentRank = currentData.currenttierpatched || highestData.patched_tier || 'Sin Clasificar';
-let currentRR = currentData.ranking_in_tier ?? 0;
-let rankImage = currentData.images?.small || currentData.images?.large || highestData.images?.small || '';
+function timeAgo(dateStr) {
+  if (!dateStr) return '—';
+  const diffMs = Date.now() - new Date(dateStr).getTime();
+  const s = Math.floor(diffMs / 1000);
+  if (s < 60) return 'justo ahora';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `hace ${m} ${m === 1 ? 'minuto' : 'minutos'}`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `hace ${h} ${h === 1 ? 'hora' : 'horas'}`;
+  const d = Math.floor(h / 24);
+  return `hace ${d} ${d === 1 ? 'día' : 'días'}`;
+}
+
+function crestSVG(rank) {
+  if (rank === 1) return `<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M2 8L6 11L12 4L18 11L22 8L20 18H4L2 8Z" fill="#f2c14e"/></svg>`;
+  if (rank === 2) return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="10" r="7" fill="#c7d0da"/><path d="M9 16L7 22L12 19L17 22L15 16" fill="#c7d0da"/></svg>`;
+  return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="10" r="7" fill="#d9884b"/><path d="M9 16L7 22L12 19L17 22L15 16" fill="#d9884b"/></svg>`;
+}
+
+// Gráfico SVG para las últimas partidas
+function streakSVG(matches) {
+  const w = 110, h = 32, pad = 6;
+  if (!matches || matches.length === 0) {
+    return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}"><text x="0" y="20" fill="#5a5a66" font-size="10">sin partidas</text></svg>`;
+  }
+
+  // Convertimos las partidas en una tendencia acumulativa (+1 victoria, -1 derrota)
+  let val = 0;
+  const history = [0];
+  [...matches].reverse().forEach(m => {
+    if (m.result === 'Victoria') val += 1;
+    else if (m.result === 'Derrota') val -= 1;
+    history.push(val);
+  });
+
+  const min = Math.min(...history), max = Math.max(...history);
+  const range = (max - min) || 1;
+  const stepX = (w - pad * 2) / (history.length - 1);
+  const points = history.map((v, i) => {
+    const x = pad + i * stepX;
+    const y = h - pad - ((v - min) / range) * (h - pad * 2);
+    return [x, y];
+  });
+
+  const path = points.map((p, i) => (i === 0 ? 'M' : 'L') + p[0].toFixed(1) + ',' + p[1].toFixed(1)).join(' ');
+  const last = points[points.length - 1];
+  const trendUp = history[history.length - 1] >= history[0];
+  const color = trendUp ? '#38c98e' : '#ef5761';
+
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <path d="${path}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${last[0].toFixed(1)}" cy="${last[1].toFixed(1)}" r="3" fill="${color}"/>
+  </svg>`;
+}
+
+let currentData = null;
+let sortState = { key: 'elo', direction: 'desc' };
+
+function getSortValue(p, key) {
+  switch (key) {
+    case 'jugador': return (p.name || '').toLowerCase();
+    case 'elo': return eloScore(p);
+    case 'vd': return p.stats?.winRate || 0;
+    case 'kd': return p.stats?.kd || 0;
+    case 'hs': return p.stats?.headshotPct || 0;
+    default: return 0;
+  }
+}
+
+function sortPlayers(list, key, direction) {
+  if (!key || !direction) return list;
+  return [...list].sort((a, b) => {
+    const va = getSortValue(a, key), vb = getSortValue(b, key);
+    let cmp = (typeof va === 'string') ? va.localeCompare(vb) : va - vb;
+    return direction === 'asc' ? cmp : -cmp;
+  });
+}
+
+function setSort(key) {
+  if (sortState.key === key) {
+    if (sortState.direction === 'asc') { sortState.direction = 'desc'; }
+    else if (sortState.direction === 'desc') { sortState.key = null; sortState.direction = null; }
+    else { sortState.direction = 'asc'; }
+  } else {
+    sortState.key = key;
+    sortState.direction = 'desc';
+  }
+  if (currentData) render(currentData);
+}
+
+function updateSortIcons() {
+  document.querySelectorAll('.sort-arrow').forEach(el => {
+    const key = el.dataset.key, dir = el.dataset.dir;
+    const active = sortState.key === key && sortState.direction === dir;
+    el.classList.toggle('text-white', active);
+    el.classList.toggle('text-dim', !active);
+  });
+}
+
+function render(data) {
+  currentData = data;
+  if (data.updatedAt) {
+    document.getElementById('lastUpdate').textContent = timeAgo(data.updatedAt);
+  }
+
+  const list = [...(data.players || [])].sort((a, b) => eloScore(b) - eloScore(a));
+  list.forEach((p, i) => { p.__rank = i + 1; });
+
+  // PODIO
+  const podium = document.getElementById('podium');
+  podium.innerHTML = '';
+  const rankOrderClass = { 1: 'order-2', 2: 'order-1', 3: 'order-3' };
+
+  list.slice(0, 3).forEach((p, idx) => {
+    const rank = idx + 1;
+    const wr = p.stats?.winRate || 0;
+    const div = document.createElement('div');
+    div.className = `relative overflow-hidden bg-gradient-to-b from-panel2 to-panel border rounded-2xl p-[22px] md:${rankOrderClass[rank]} ` +
+      (rank === 1
+        ? 'border-gold/40 before:content-[\'\'] before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_-20%,rgba(242,193,78,0.18),transparent_65%)] before:animate-glow before:pointer-events-none'
+        : 'border-line');
+
+    const avatarHTML = p.cardImage
+      ? `<img src="${p.cardImage}" class="w-11 h-11 rounded-full object-cover border-2 border-line">`
+      : `<div class="w-11 h-11 rounded-full flex items-center justify-center font-bold text-base bg-[#4a3a8a] text-white border-2 border-line">${initials(p.name)}</div>`;
+
+    const rankImgHTML = p.rankImage
+      ? `<img src="${p.rankImage}" class="w-12 h-12 object-contain">`
+      : `<div class="w-10 h-10 rounded bg-zinc-800 flex items-center justify-center font-bold text-xs text-dim">VAL</div>`;
+
+    div.innerHTML = `
+      <div class="flex items-center gap-3 mb-[18px] relative z-[1]">
+        <div class="w-[34px] h-[34px] flex-shrink-0 flex items-center justify-center">${crestSVG(rank)}</div>
+        ${avatarHTML}
+        <div>
+          <div class="font-bold text-base">${escapeHtml(p.name)}</div>
+          <div class="text-[11.5px] text-dim">#${escapeHtml(p.tag || '')}</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-3 justify-center">
+        ${rankImgHTML}
+        <div class="font-bold text-[34px] flex items-center gap-1.5 justify-center">${p.rr || 0} <span class="text-sm text-dim font-semibold">RR</span></div>
+      </div>
+      <div class="text-center text-xs text-dim font-bold mt-1 uppercase tracking-wider">${escapeHtml(p.rank || 'Sin Clasificar')}</div>
+      <div class="flex gap-[22px] mt-4 relative z-[1]">
+        <div><b class="block text-base">${p.stats?.wins || 0}V ${p.stats?.losses || 0}D</b><small class="text-dim text-[10.5px] tracking-[0.5px]">${p.stats?.totalMatches || 0} PARTIDAS</small></div>
+        <div><b class="block text-base">${wr}%</b><small class="text-dim text-[10.5px] tracking-[0.5px]">WINRATE</small></div>
+      </div>
+      <div class="h-[5px] rounded-[3px] overflow-hidden flex mt-4 bg-loss relative z-[1]"><i class="block h-full bg-win" style="width:${wr}%"></i></div>
+    `;
+    podium.appendChild(div);
+  });
+
+  // TABLA
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  const table = document.getElementById('table');
+  const empty = document.getElementById('emptyState');
+
+  if (list.length === 0) {
+    table.style.display = 'none';
+    empty.innerHTML = '<b class="block text-ink font-bold text-lg mb-1.5">No hay participantes cargados</b>';
+    empty.style.display = 'block';
+    return;
+  }
+  table.style.display = 'table';
+  empty.style.display = 'none';
+
+  const sortedForTable = sortPlayers(list, sortState.key, sortState.direction);
+
+  sortedForTable.forEach((p) => {
+    const rank = p.__rank;
+    const rankColor = rank === 1 ? 'text-gold' : rank === 2 ? 'text-silver' : rank === 3 ? 'text-bronze' : 'text-dim';
+    const wr = p.stats?.winRate || 0;
+
+    const avatarHTML = p.cardImage
+      ? `<img src="${p.cardImage}" class="w-8 h-8 rounded-full object-cover border border-line">`
+      : `<div class="w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-xs text-white border-2 border-line">${initials(p.name)}</div>`;
+
+    const rankImgHTML = p.rankImage
+      ? `<img src="${p.rankImage}" class="w-9 h-9 object-contain">`
+      : ``;
+
+    const tr = document.createElement('tr');
+    tr.className = 'hover:bg-white/[0.02] border-b border-line/40';
+    tr.innerHTML = `
+      <td class="px-4 py-3 align-middle font-bold text-[15px] w-9 ${rankColor}">${rank}</td>
+      <td class="px-4 py-3 align-middle">
+        <div class="flex items-center gap-2.5">
+          ${avatarHTML}
+          <div>
+            <div class="text-sm font-semibold">${escapeHtml(p.name)}</div>
+            <div class="text-[11px] text-dim">#${escapeHtml(p.tag || '')}</div>
+          </div>
+        </div>
+      </td>
+      <td class="px-4 py-3 align-middle">
+        <div class="flex items-center gap-2.5">
+          ${rankImgHTML}
+          <div>
+            <div class="font-bold text-[16px]">${p.rr || 0} RR</div>
+            <div class="text-[10.5px] text-dim font-bold uppercase">${escapeHtml(p.rank || 'Sin Clasificar')}</div>
+          </div>
+        </div>
+      </td>
+      <td class="px-4 py-3 align-middle">
+        <div><b class="text-win font-bold italic text-[15px]">${wr}%</b><span class="text-[11px] ml-1.5"><span class="text-win font-bold">${p.stats?.wins || 0}V</span> <span class="text-dim text-xl">•</span> <span class="text-loss font-bold">${p.stats?.losses || 0}D</span></span></div>
+        <div class="flex items-center w-[130px] mt-1.5">
+          <div class="h-[4px] bg-win rounded-l-[2px]" style="width:${wr}%; clip-path: polygon(0 0,100% 0,calc(100% - 4px) 100%,0 100%); box-shadow:0 0 8px rgba(56,201,142,.35);"></div>
+          <div class="w-[1px]"></div>
+          <div class="h-[4px] bg-loss rounded-r-[2px] flex-1" style="clip-path: polygon(4px 0,100% 0,100% 100%,0 100%);"></div>
+        </div>
+      </td>
+      <td class="px-4 py-3 align-middle font-bold text-[15px]">${p.stats?.kd || '0.00'}</td>
+      <td class="px-4 py-3 align-middle font-bold text-[15px] text-purple">${p.stats?.headshotPct || 0}%</td>
+      <td class="px-4 py-3 align-middle">${streakSVG(p.matches)}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  updateSortIcons();
+}
+
+function tickCountdown() {
+  const el = document.getElementById('countdownVal');
+  if (!deadline) { el.textContent = '--:--:--'; return; }
+  const diff = new Date(deadline).getTime() - Date.now();
+  if (diff <= 0) { el.textContent = 'Finalizado'; }
+  else {
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    el.textContent = `${d}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+  }
+}
+
+// Carga directa de la API Vercel
+fetch('/api/stats')
+  .then(r => r.json())
+  .then(render)
+  .catch(() => {
+    document.getElementById('emptyState').innerHTML =
+      '<b class="block text-ink font-bold text-lg mb-1.5">Error al conectar con /api/stats</b>Asegúrate de que Vercel esté desplegado correctamente.';
+  });
+
+setInterval(tickCountdown, 1000);
+</script>
+</body>
+</html>
