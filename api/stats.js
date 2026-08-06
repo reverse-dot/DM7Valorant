@@ -2,7 +2,6 @@ const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
 
-// Función auxiliar para pausar la ejecución y evitar el Error 429
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default async function handler(req, res) {
@@ -34,7 +33,7 @@ export default async function handler(req, res) {
         // 1. Datos de Cuenta
         const accountUrl = `https://api.henrikdev.xyz/valorant/v1/account/${encodedName}/${encodedTag}`;
         const accountRes = await fetch(accountUrl, { headers });
-        await delay(250); // Pausa para no saturar la API
+        await delay(200);
 
         if (!accountRes.ok) {
           results.push({
@@ -52,24 +51,38 @@ export default async function handler(req, res) {
         const account = accountData.data;
 
         if (!account) continue;
-        const region = account.region || 'na';
 
-        // 2. MMR / Rango
-        const mmrUrl = `https://api.henrikdev.xyz/valorant/v2/by-puuid/mmr/${region}/${account.puuid}`;
-        const mmrRes = await fetch(mmrUrl, { headers });
-        await delay(250);
-        const mmrData = mmrRes.ok ? await mmrRes.json() : null;
+        // Forzamos latam como región principal para LAS
+        let region = 'latam';
 
-        // 3. Partidas Recientes
+        // 2. MMR / Rango en LATAM
+        let mmrUrl = `https://api.henrikdev.xyz/valorant/v2/by-puuid/mmr/${region}/${account.puuid}`;
+        let mmrRes = await fetch(mmrUrl, { headers });
+        await delay(200);
+
+        let mmrData = mmrRes.ok ? await mmrRes.json() : null;
+
+        // Si por alguna razón la cuenta no responde en latam, probar na como respaldo
+        if (!mmrData || !mmrData.data?.current_data?.currenttierpatched) {
+          region = account.region || 'na';
+          mmrUrl = `https://api.henrikdev.xyz/valorant/v2/by-puuid/mmr/${region}/${account.puuid}`;
+          mmrRes = await fetch(mmrUrl, { headers });
+          await delay(200);
+          mmrData = mmrRes.ok ? await mmrRes.json() : mmrData;
+        }
+
+        // 3. Historial de Partidas
         const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/by-puuid/matches/${region}/${account.puuid}?mode=competitive&size=5`;
         const matchesRes = await fetch(matchesUrl, { headers });
-        await delay(250);
+        await delay(200);
         const matchesData = matchesRes.ok ? await matchesRes.json() : null;
 
         const currentData = mmrData?.data?.current_data || {};
-        const currentRank = currentData.currenttierpatched || 'Sin Clasificar';
+        const highestData = mmrData?.data?.highest_rank || {};
+
+        const currentRank = currentData.currenttierpatched || highestData.patched_tier || 'Sin Clasificar';
         const currentRR = currentData.ranking_in_tier ?? 0;
-        const rankImage = currentData.images?.small || currentData.images?.large || '';
+        const rankImage = currentData.images?.small || currentData.images?.large || highestData.images?.small || '';
 
         const rawMatches = matchesData?.data || [];
         let totalKills = 0, totalDeaths = 0, totalAssists = 0;
