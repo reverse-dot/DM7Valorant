@@ -111,53 +111,48 @@ function renderMatchesBadge(matches) {
     return `<span class="text-xs text-dim italic">sin partidas</span>`;
   }
 
-  // 1. Puntos para trazar la línea Stonks
+  // 1. Trazado de puntos para la línea Stonks
   let points = [];
   let currentY = 20;
   const total = matches.length;
-  const xStep = total > 1 ? 80 / (total - 1) : 0;
+  const xStep = total > 1 ? 90 / (total - 1) : 0;
 
   matches.forEach((game, index) => {
-    if (game.won || game.result === 'Victoria') currentY -= 6; // Sube
-    else currentY += 6;                                        // Baja
-    currentY = Math.max(6, Math.min(34, currentY));
-    points.push(`${10 + index * xStep},${currentY}`);
+    if (game.won || game.result === 'Victoria') currentY -= 7; // Subida
+    else currentY += 7;                                        // Caída
+    currentY = Math.max(5, Math.min(35, currentY));
+    points.push(`${5 + index * xStep},${currentY}`);
   });
 
   const lastGameWon = matches[matches.length - 1]?.won || matches[matches.length - 1]?.result === 'Victoria';
   const strokeColor = lastGameWon ? '#38c98e' : '#ef5761';
 
-  // 2. Barras de Victoria (V) / Derrota (D)
+  // 2. Barras rectangulares LIMPIAS (sin texto D/V)
   const barsHTML = matches.map(m => {
     const isWin = m.won || m.result === 'Victoria';
-    const bg = isWin ? 'rgba(56, 201, 142, 0.2)' : 'rgba(239, 87, 97, 0.2)';
+    const bg = isWin ? 'rgba(56, 201, 142, 0.25)' : 'rgba(239, 87, 97, 0.25)';
     const border = isWin ? '#38c98e' : '#ef5761';
-    const label = isWin ? 'V' : 'D';
 
     return `
-      <div title="${m.map || 'Competitivo'} (${m.kda || '0.00'} KDA)" 
+      <div title="${m.map || 'Competitivo'} - ${isWin ? 'Victoria' : 'Derrota'} (${m.kda || '0.00'} KDA)" 
            style="
-              width: 16px; 
+              width: 14px; 
               height: 28px; 
               background: ${bg}; 
               border: 1px solid ${border}; 
               border-radius: 4px; 
-              display: flex; 
-              align-items: center; 
-              justify-content: center; 
-              font-size: 10px; 
-              font-weight: 800; 
-              color: ${border};
               z-index: 10;
-           ">
-          ${label}
+              transition: transform 0.2s;
+           "
+           onmouseover="this.style.transform='scale(1.15)'"
+           onmouseout="this.style.transform='scale(1)'">
       </div>
     `;
   }).join('');
 
-  // 3. Superposición de barras y trazado SVG Stonks
+  // 3. Contenedor final con la gráfica Stonks superpuesta
   return `
-    <div style="position: relative; display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; background: rgba(0,0,0,0.4); border-radius: 8px; border: 1px solid #1e1e27;">
+    <div style="position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; background: rgba(0,0,0,0.45); border-radius: 8px; border: 1px solid #1e1e27;">
       ${barsHTML}
       <svg style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20;">
         <polyline
@@ -167,7 +162,7 @@ function renderMatchesBadge(matches) {
           stroke-linecap="round"
           stroke-linejoin="round"
           points="${points.join(' ')}"
-          style="filter: drop-shadow(0px 0px 4px ${strokeColor});"
+          style="filter: drop-shadow(0px 0px 5px ${strokeColor});"
         />
       </svg>
     </div>
