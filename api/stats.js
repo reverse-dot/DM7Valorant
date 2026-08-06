@@ -1,4 +1,8 @@
-// Función para forzar pausa entre peticiones
+// Caché en memoria para evitar llamadas repetidas durante 10 minutos
+let globalCache = null;
+let lastFetchTime = 0;
+const CACHE_DURATION_MS = 10 * 60 * 1000; // 10 minutos
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export default async function handler(req, res) {
@@ -6,6 +10,13 @@ export default async function handler(req, res) {
 
   if (!API_KEY) {
     return res.status(500).json({ error: 'Falta HENRIK_API_KEY' });
+  }
+
+  // 1. Si los datos en caché están vigentes, los entregamos inmediatamente
+  const now = Date.now();
+  if (globalCache && (now - lastFetchTime < CACHE_DURATION_MS)) {
+    res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=300');
+    return res.status(200).json(globalCache);
   }
 
   const players = [
@@ -18,16 +29,15 @@ export default async function handler(req, res) {
 
   const results = [];
 
-  // Usamos for...of secuencial estricto
   for (const p of players) {
     let rank = 'Sin Clasificar';
     let rr = 0;
     let rankImage = '';
-    let wins = 0, losses = 0, kills = 0, deaths = 0, headshots = 0, bodyshots = 0, legshots = 0;
-    let matchesList = [];
 
     try {
-      // 1. Obtener MMR / Rango
+      // Retardo de 1.2 segundos entre cada jugador para respetar los límites
+      await sleep(1200);
+
       const mmrRes = await fetch(
         `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
         { headers: { 'Authorization': API_KEY } }
@@ -35,57 +45,15 @@ export default async function handler(req, res) {
 
       if (mmrRes.ok) {
         const mmrData = await mmrRes.json();
-        rank = mmrData.data?.current_data?.currenttierpatched || 'Sin Clasificar';
-        rr = mmrData.data?.current_data?.ranking_in_tier || 0;
-        rankImage = mmrData.data?.current_data?.images?.small || '';
+        const currentData = mmrData.data?.current_data;
+
+        rank = currentData?.currenttierpatched || 'Sin Clasificar';
+        rr = currentData?.ranking_in_tier || 0;
+        rankImage = currentData?.images?.small || '';
       }
-
-      // Esperamos 1 segundo completo antes de la siguiente petición
-      await sleep(1000);
-
-      // 2. Obtener Historial
-      const matchesRes = await fetch(
-        `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?filter=competitive`,
-        { headers: { 'Authorization': API_KEY } }
-      );
-
-      if (matchesRes.ok) {
-        const matchesData = await matchesRes.json();
-        const matches = matchesData.data || [];
-
-        matches.forEach((m) => {
-          const playerStats = m.players?.all_players?.find(
-            (player) => player.name.toLowerCase() === p.name.toLowerCase()
-          );
-
-          if (playerStats) {
-            const teamColor = playerStats.team.toLowerCase();
-            const redWon = m.teams?.red?.has_won;
-            const blueWon = m.teams?.blue?.has_won;
-            const isWin = (teamColor === 'red' && redWon) || (teamColor === 'blue' && blueWon);
-
-            if (isWin) wins++; else losses++;
-
-            kills += playerStats.stats?.kills || 0;
-            deaths += playerStats.stats?.deaths || 0;
-            headshots += playerStats.stats?.headshots || 0;
-            bodyshots += playerStats.stats?.bodyshots || 0;
-            legshots += playerStats.stats?.legshots || 0;
-
-            matchesList.push({ result: isWin ? 'Victoria' : 'Derrota' });
-          }
-        });
-      }
-
     } catch (err) {
       console.error(`Error consultando a ${p.name}:`, err);
     }
-
-    const totalMatches = wins + losses;
-    const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
-    const kd = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
-    const totalShots = headshots + bodyshots + legshots;
-    const headshotPct = totalShots > 0 ? Math.round((headshots / totalShots) * 100) : 0;
 
     results.push({
       name: p.name,
@@ -93,15 +61,19 @@ export default async function handler(req, res) {
       rank,
       rr,
       rankImage,
-      stats: { wins, losses, totalMatches, winRate, kd, headshotPct },
-      matches: matchesList
+      stats: { wins: 0, losses: 0, totalMatches: 0, winRate: 0, kd: '0.00', headshotPct: 0 },
+      matches: []
     });
-
-    // Esperamos 1 segundo antes de pasar al SIGUIENTE JUGADOR
-    await sleep(1000);
   }
 
-  // Guardamos en caché por 10 minutos para proteger tu API Key
+  // Verificar si obtuvimos al menos 1 resultado válido
+  const hasData = results.some(p => p.rr > 0 || p.rank !== 'Sin Clasificar');
+
+  if (hasData || !globalCache) {
+    globalCache = { updatedAt: new Date().toISOString(), players: results };
+    lastFetchTime = now;
+  }
+
   res.setHeader('Cache-Control', 's-maxage=600, stale-while-revalidate=300');
-  return res.status(200).json({ updatedAt: new Date().toISOString(), players: results });
+  return res.status(200).json(globalCache);
 }
