@@ -46,6 +46,8 @@ export default async function handler(req, res) {
 
     let wins = 0;
     let losses = 0;
+    let totalActGames = 0;
+    let currentActShort = '';
     let totalKills = 0;
     let totalDeaths = 0;
     let totalHeadshots = 0;
@@ -54,20 +56,42 @@ export default async function handler(req, res) {
     let matchesHistory = [];
 
     try {
-      // 1. Obtener MMR (Rango y RR)
+      // 1. Obtener MMR (Rango, RR y Récord del Acto actual) - v3, incluye "seasonal"
       await sleep(2200);
       const mmrRes = await fetchWithRetry(
-        `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
+        `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
         reqHeaders
       );
 
       if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
-        const currentData = mmrData.data?.current_data;
-        rank = currentData?.currenttierpatched || 'Sin Clasificar';
-        rr = currentData?.ranking_in_tier || 0;
-        tier = currentData?.currenttier || 0;
-        rankImage = currentData?.images?.small || '';
+        const currentData = mmrData.data?.current;
+        rank = currentData?.tier?.name || 'Sin Clasificar';
+        rr = currentData?.rr || 0;
+        tier = currentData?.tier?.id || 0;
+
+        // El acto actual es el último elemento del array "seasonal"
+        const seasonal = mmrData.data?.seasonal || [];
+        const currentAct = seasonal[seasonal.length - 1];
+
+        if (currentAct) {
+          wins = currentAct.wins || 0;
+          totalActGames = currentAct.games || 0;
+          losses = totalActGames - wins;
+          currentActShort = currentAct.season?.short || '';
+        }
+      }
+
+      // 1b. La v3 no trae el ícono del rango, lo pedimos con la v2 (solo para la imagen)
+      await sleep(2200);
+      const mmrImgRes = await fetchWithRetry(
+        `https://api.henrikdev.xyz/valorant/v2/mmr/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
+        reqHeaders
+      );
+
+      if (mmrImgRes && mmrImgRes.ok) {
+        const mmrImgData = await mmrImgRes.json();
+        rankImage = mmrImgData.data?.current_data?.images?.small || '';
       }
 
       // 2. Obtener Historial de Partidas
@@ -94,10 +118,9 @@ export default async function handler(req, res) {
             const redWon = m.teams?.red?.has_won;
             const blueWon = m.teams?.blue?.has_won;
 
+            // Nota: wins/losses YA NO se cuentan acá (eso viene del total del acto vía MMR v3).
+            // Esto solo se usa para marcar victoria/derrota en el detalle de la última partida.
             const won = (playerTeam === 'red' && redWon) || (playerTeam === 'blue' && blueWon);
-
-            if (won) wins++;
-            else losses++;
 
             const k = playerObj.stats?.kills || 0;
             const d = playerObj.stats?.deaths || 0;
@@ -123,7 +146,7 @@ export default async function handler(req, res) {
       console.error(`Error al procesar datos para ${p.name}:`, err);
     }
 
-    const totalMatches = wins + losses;
+    const totalMatches = totalActGames;
     const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
     const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : (totalKills > 0 ? totalKills.toFixed(2) : '0.00');
 
@@ -140,6 +163,7 @@ export default async function handler(req, res) {
       tier,
       elo,
       rankImage,
+      act: currentActShort,
       stats: {
         wins,
         losses,
