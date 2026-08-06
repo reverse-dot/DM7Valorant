@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Valorant SoloQ Challenge</title>
+  <meta name="description" content="Tabla de clasificación en vivo del SoloQ Challenge entre amigos.">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#ff4655">
+  <link rel="icon" type="image/png" href="assets/favicon.png">
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            valDark: '#080a0c',
+            valCard: '#101418',
+            valCardHover: '#161b22',
+            valRed: '#ff4655',
+            valGold: '#e3b341',
+            valSilver: '#9e9e9e',
+            valBronze: '#cd7f32',
+            valAccent: '#00f0ff'
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    body {
+      background-color: #080a0c;
+      color: #ece8e1;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    .glass-card {
+      background: rgba(16, 20, 24, 0.85);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .podium-card {
+      background: radial-gradient(circle at top, rgba(255, 70, 85, 0.08) 0%, rgba(16, 20, 24, 0.95) 70%);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #080a0c;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #ff4655;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col custom-scrollbar antialiased">
+
+  <header class="border-b border-white/10 bg-valDark/90 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-4 flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center space-x-3">
+        <div class="w-9 h-9 bg-valRed rounded flex items-center justify-center font-black text-white text-2xl shadow-lg shadow-valRed/30">V</div>
+        <div>
+          <h1 class="text-2xl font-black tracking-widest text-white leading-none">SOLOQ <span class="text-valRed">CHALLENGE</span></h1>
+          <p class="text-[10px] text-gray-400 tracking-wider uppercase mt-0.5">Torneo entre amigos • Valorant</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-4">
+        <div class="bg-black/40 border border-white/10 rounded-lg px-3 py-1.5 text-xs text-gray-400">
+          Última actualización: <span id="lastUpdated" class="text-white font-semibold">Cargando...</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8 flex-grow w-full space-y-8">
+
+    <section>
+      <div class="flex items-center space-x-2 mb-4">
+        <span class="text-valRed font-black text-xl">#</span>
+        <h2 class="text-lg font-bold text-white uppercase tracking-wider">Líderes del Torneo</h2>
+      </div>
+      <div id="podiumContainer" class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        </div>
+    </section>
+
+    <section class="space-y-4">
+      <div class="glass-card p-4 rounded-xl flex flex-wrap gap-4 items-center justify-between">
+        <div class="flex-1 min-w-[240px]">
+          <input type="text" id="searchInput" placeholder="Buscar participante por Riot ID..." class="w-full bg-black/50 border border-white/10 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-valRed transition">
+        </div>
+        <div class="flex flex-wrap gap-3">
+          <select id="sortSelect" class="bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-valRed transition">
+            <option value="rank">Ordenar por Posición (RR / Rango)</option>
+            <option value="kd">Ordenar por K/D Ratio</option>
+            <option value="winrate">Ordenar por Winrate</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="glass-card rounded-xl overflow-hidden overflow-x-auto">
+        <table class="w-full text-left border-collapse min-w-[800px]">
+          <thead>
+            <tr class="border-b border-white/10 bg-black/40 text-[11px] font-bold text-gray-400 uppercase tracking-wider">
+              <th class="py-3.5 px-4 text-center w-16">#</th>
+              <th class="py-3.5 px-4">Jugador</th>
+              <th class="py-3.5 px-4">Rango / ELO</th>
+              <th class="py-3.5 px-4 w-52">V / D (Winrate)</th>
+              <th class="py-3.5 px-4 text-center">K/D</th>
+              <th class="py-3.5 px-4 text-center">HS %</th>
+              <th class="py-3.5 px-4 text-center">Últimas Partidas</th>
+            </tr>
+          </thead>
+          <tbody id="leaderboardBody" class="divide-y divide-white/5 text-sm">
+            </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="border-t border-white/10 py-6 text-center text-xs text-gray-500">
+    <p>SoloQ Challenge Valorant • Actualizaciones automáticas con GitHub Actions</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>

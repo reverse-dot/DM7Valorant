@@ -1,0 +1,20 @@
+{
+  "short_name": "ValStats",
+  "name": "Valorant Player Tracker",
+  "icons": [
+    {
+      "src": "assets/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "assets/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": ".",
+  "background_color": "#0f1923",
+  "theme_color": "#ff4655",
+  "display": "standalone"
+}

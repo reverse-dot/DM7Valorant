@@ -1,0 +1,12 @@
+{
+  "name": "valorant-tracker",
+  "version": "1.0.0",
+  "description": "Tracker de estadísticas de Valorant estático impulsado por GitHub Actions",
+  "main": "scripts/update.js",
+  "scripts": {
+    "update": "node scripts/update.js"
+  },
+  "dependencies": {
+    "node-fetch": "^2.6.7"
+  }
+}
