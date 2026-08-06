@@ -2,6 +2,9 @@ const fetch = require('node-fetch');
 const path = require('path');
 const fs = require('fs');
 
+// Función auxiliar para pausar la ejecución y evitar el Error 429
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=150');
@@ -31,21 +34,36 @@ export default async function handler(req, res) {
         // 1. Datos de Cuenta
         const accountUrl = `https://api.henrikdev.xyz/valorant/v1/account/${encodedName}/${encodedTag}`;
         const accountRes = await fetch(accountUrl, { headers });
-        if (!accountRes.ok) continue;
-        const accountData = await accountRes.json();
-        if (!accountData.data) continue;
+        await delay(250); // Pausa para no saturar la API
 
+        if (!accountRes.ok) {
+          results.push({
+            name: player.name,
+            tag: player.tag,
+            rank: 'Sin Clasificar',
+            rr: 0,
+            stats: { kd: 0, winRate: 0, headshotPct: 0, totalMatches: 0, wins: 0, losses: 0 },
+            matches: []
+          });
+          continue;
+        }
+
+        const accountData = await accountRes.json();
         const account = accountData.data;
+
+        if (!account) continue;
         const region = account.region || 'na';
 
         // 2. MMR / Rango
         const mmrUrl = `https://api.henrikdev.xyz/valorant/v2/by-puuid/mmr/${region}/${account.puuid}`;
         const mmrRes = await fetch(mmrUrl, { headers });
+        await delay(250);
         const mmrData = mmrRes.ok ? await mmrRes.json() : null;
 
-        // 3. Historial de Partidas
+        // 3. Partidas Recientes
         const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/by-puuid/matches/${region}/${account.puuid}?mode=competitive&size=5`;
         const matchesRes = await fetch(matchesUrl, { headers });
+        await delay(250);
         const matchesData = matchesRes.ok ? await matchesRes.json() : null;
 
         const currentData = mmrData?.data?.current_data || {};
@@ -117,7 +135,14 @@ export default async function handler(req, res) {
           matches: matchesHistory
         });
       } catch (err) {
-        console.error(`Error cargando a ${player.name}:`, err);
+        results.push({
+          name: player.name,
+          tag: player.tag,
+          rank: 'Sin Clasificar',
+          rr: 0,
+          stats: { kd: 0, winRate: 0, headshotPct: 0, totalMatches: 0, wins: 0, losses: 0 },
+          matches: []
+        });
       }
     }
 
