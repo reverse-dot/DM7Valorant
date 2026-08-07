@@ -40,12 +40,12 @@ async function fetchWithRetry(url, headers, retries = 4) {
 }
 
 const players = [
-  { name: 'X1no', tag: 'DM7', region: 'latam' },
-  { name: 'Xrosfire', tag: '4884', region: 'latam' },
-  { name: 'zingCL', tag: 'DM7', region: 'latam' },
-  { name: 'pavliuchenko', tag: '7144', region: 'latam' },
-  { name: 'sayaplayer', tag: '9243', region: 'latam' },
-  { name: 'Focus', tag: 'DM7', region: 'latam' }
+  { name: 'X1no', tag: 'DM7', region: 'latam', cardImage: 'https://www.reddit.com/media?url=https%3A%2F%2Fpreview.redd.it%2Fbro-i-hope-so-much-we-will-get-a-kunigami-episode-v0-s2oinv2dwcae1.png%3Fwidth%3D1080%26crop%3Dsmart%26auto%3Dwebp%26s%3Dfc3fdfb2f3d174d1731dc2a9897f8f934a823a76' },
+  { name: 'Xrosfire', tag: '4884', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/346136099027943434/f907376d139f25ff98003dc14e6930a3.webp?size=160' },
+  { name: 'zingCL', tag: 'DM7', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/168554778283081729/beecf04af89b8067a927a2a18d66ac6e.webp?size=160' },
+  { name: 'pavliuchenko', tag: '7144', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/309201004979683328/0996872fe3e066a0cdc5904c184b9a3a.webp?size=160' },
+  { name: 'sayaplayer', tag: '9243', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/205443962993901568/a88cc31d04ba149be3ac8c0cff146307.webp?size=160' },
+  { name: 'Focus', tag: 'DM7', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/161309819809169411/f1cdfc36cff46a0265f72e59442cc4f5.webp?size=160' }
 ];
 
 // Hace TODO el trabajo pesado: recorre jugadores UNO POR UNO, con pausas entre cada llamada.
