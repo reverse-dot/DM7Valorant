@@ -110,6 +110,13 @@ let sortState = { key: 'elo', dir: 'desc' };
 
 function initials(name){ return (name||'?').trim().slice(0,2).toUpperCase(); }
 
+function avatarHTML(p, sizeClasses){
+  if (p.cardImage) {
+    return `<img src="${p.cardImage}" class="${sizeClasses} rounded-full flex-shrink-0 object-cover border-2 border-line" onerror="this.outerHTML='<div class=\\'${sizeClasses} rounded-full flex-shrink-0 flex items-center justify-center font-bold bg-[#2a2a38] text-white border-2 border-line\\'>${initials(p.name)}</div>'">`;
+  }
+  return `<div class="${sizeClasses} rounded-full flex-shrink-0 flex items-center justify-center font-bold bg-[#2a2a38] text-white border-2 border-line">${initials(p.name)}</div>`;
+}
+
 function crestSVG(rank){
   if(rank===1) return `<svg width="30" height="30" viewBox="0 0 24 24" fill="none"><path d="M2 8L6 11L12 4L18 11L22 8L20 18H4L2 8Z" fill="#f2c14e"/></svg>`;
   if(rank===2) return `<svg width="26" height="26" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="10" r="7" fill="#c7d0da"/><path d="M9 16L7 22L12 19L17 22L15 16" fill="#c7d0da"/></svg>`;
@@ -201,7 +208,7 @@ function renderPodium(players) {
     div.innerHTML = `
       <div class="flex items-center gap-3 mb-[18px] relative z-[1]">
         <div class="w-[34px] h-[34px] flex-shrink-0 flex items-center justify-center">${crestSVG(rank)}</div>
-        <div class="w-11 h-11 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-base bg-[#2a2a38] text-white border-2 border-line">${initials(p.name)}</div>
+        ${avatarHTML(p, 'w-11 h-11 text-base')}
         <div>
           <div class="font-bold text-base">${p.name}</div>
           <div class="text-[11.5px] text-dim">#${p.tag}</div>
@@ -242,7 +249,7 @@ function renderTable(players) {
       <td class="px-4 py-3.5 align-middle font-bold text-[15px] ${rankColor}">${rank}</td>
       <td class="px-4 py-3.5 align-middle">
         <div class="flex items-center gap-3">
-          <div class="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-xs text-white bg-zinc-800 border border-line">${initials(p.name)}</div>
+          ${avatarHTML(p, 'w-9 h-9 text-xs')}
           <div>
             <div class="text-sm font-bold text-ink">${p.name}</div>
             <div class="text-[11px] text-dim">#${p.tag}</div>
