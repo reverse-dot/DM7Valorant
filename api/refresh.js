@@ -10,24 +10,56 @@ function rankImageFromTier(tierId) {
   return `https://media.valorant-api.com/competitivetiers/${TIER_CONTENT_ID}/${tierId}/smallicon.png`;
 }
 
-async function fetchWithRetry(url, headers, retries = 2) {
+// Pequeño helper para no martillar la API si nos da 429: respeta Retry-After
+// y si no viene, hace backoff incremental con jitter.
+async function fetchWithRetry(url, headers, retries = 4) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, { headers });
 
       if (res.status === 429) {
-        const retryAfter = Number(res.headers.get("Retry-After") || 6);
-        console.warn(`429 Límite alcanzado. Esperando ${retryAfter}s...`);
-        await sleep(retryAfter * 1000);
+        const retryAfterHeader = Number(res.headers.get('Retry-After'));
+        const backoff = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+          ? retryAfterHeader
+          : 5 * (i + 1);
+        const jitter = Math.random() * 1000;
+        console.warn(`429 en ${url}. Esperando ${backoff}s (intento ${i + 1}/${retries + 1})...`);
+        await sleep(backoff * 1000 + jitter);
         continue;
       }
 
       return res;
     } catch (err) {
-      console.error("Error de red:", err.message);
+      console.error(`Error de red en ${url}:`, err.message);
+      await sleep(1500);
     }
   }
   return null;
+}
+
+/**
+ * Devuelve, para un jugador, wins/losses/rank reales usando el endpoint
+ * v3/mmr de HenrikDev, que trae por temporada (`seasonal`) el conteo OFICIAL
+ * de Riot: { wins, games }. Esto reemplaza la vieja lógica que adivinaba
+ * victoria/derrota mirando si el RR subía o bajaba (poco fiable: deranks,
+ * decay, cambios de RR en 0, etc. rompían el conteo), y que además dependía
+ * de `mmr-history`, un endpoint que solo trae las últimas ~N partidas, así
+ * que si el refresh no corría seguido se perdían partidas para siempre.
+ *
+ * Con v3/mmr solo hace falta 1 request por jugador (no hay paginado), y el
+ * número de wins/games que devuelve es acumulado por Riot para todo el acto,
+ * así que nunca se "cae" una partida por no haber refrescado a tiempo.
+ */
+async function fetchPlayerMMR(p, headers) {
+  const platform = 'pc';
+  const url = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/${platform}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
+  const res = await fetchWithRetry(url, headers);
+  if (!res || !res.ok) {
+    if (res) console.error(`v3/mmr para ${p.name}#${p.tag} devolvió ${res.status}`);
+    return null;
+  }
+  const json = await res.json();
+  return json?.data || null;
 }
 
 async function buildStats(API_KEY, previousStats) {
@@ -58,44 +90,76 @@ async function buildStats(API_KEY, previousStats) {
     const playerKey = `${p.name}#${p.tag}`;
     const prevData = prevMap[playerKey] || {};
 
-    let processedMatchIds = new Set(prevData.processedMatchIds || []);
+    // seasonBaselines guarda, por season.id, el último {wins, games}
+    // oficial que vimos para ese jugador. Así calculamos el delta real
+    // desde el último refresh en vez de re-contar todo desde cero.
+    const seasonBaselines = { ...(prevData.seasonBaselines || {}) };
+    const isMigratingFromOldSchema = !prevData.seasonBaselines;
+
     let wins = prevData.stats?.wins || 0;
     let losses = prevData.stats?.losses || 0;
-
-    if (index > 0) await sleep(3000);
 
     let rank = prevData.rank || 'Sin Clasificar';
     let rr = prevData.rr || 0;
     let tier = prevData.tier || 0;
     let rankImage = prevData.rankImage || '';
 
+    if (index > 0) await sleep(1500);
+
     try {
-      const mmrHistoryUrl = `https://api.henrikdev.xyz/valorant/v1/mmr-history/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
-      const mmrHistRes = await fetchWithRetry(mmrHistoryUrl, reqHeaders);
+      const mmr = await fetchPlayerMMR(p, reqHeaders);
 
-      if (mmrHistRes && mmrHistRes.ok) {
-        const histData = await mmrHistRes.json();
-        const matchesList = histData.data || [];
-
-        if (matchesList.length > 0) {
-          const latest = matchesList[0];
-          rank = latest.currenttierpatched || rank;
-          rr = latest.ranking_in_tier ?? rr;
-          tier = latest.currenttier ?? tier;
+      if (mmr) {
+        if (mmr.current) {
+          tier = mmr.current.tier?.id ?? tier;
+          rank = mmr.current.tier?.name ?? rank;
+          rr = mmr.current.rr ?? rr;
           rankImage = rankImageFromTier(tier);
+        }
 
-          // Recorremos las partidas recientes
-          [...matchesList].reverse().forEach(m => {
-            // Generamos una clave ÚNICA basada en ID de partida o Fecha+RR
-            const matchUniqueKey = m.match_id || `${m.date_raw || m.date}-${m.ranking_in_tier}-${m.mmr_change_to_last_game}`;
-            
-            if (!processedMatchIds.has(matchUniqueKey)) {
-              processedMatchIds.add(matchUniqueKey);
-              
-              const change = m.mmr_change_to_last_game ?? 0;
-              if (change > 0) wins++;
-              else if (change < 0) losses++;
+        const seasonal = Array.isArray(mmr.seasonal) ? mmr.seasonal : [];
+
+        if (isMigratingFromOldSchema) {
+          // Primer refresh con la lógica nueva: en vez de seguir arrastrando
+          // un contador viejo calculado con el método impreciso, lo
+          // "corregimos" tomando como línea base los números oficiales de
+          // Riot para todas las temporadas que ya tenemos guardadas. A
+          // partir de acá solo se suman deltas reales.
+          let migratedWins = 0;
+          let migratedLosses = 0;
+          seasonal.forEach(s => {
+            const seasonId = s.season?.id;
+            if (!seasonId) return;
+            const w = s.wins || 0;
+            const g = s.games || 0;
+            seasonBaselines[seasonId] = { wins: w, games: g };
+            migratedWins += w;
+            migratedLosses += Math.max(0, g - w);
+          });
+          wins = migratedWins;
+          losses = migratedLosses;
+        } else {
+          seasonal.forEach(s => {
+            const seasonId = s.season?.id;
+            if (!seasonId) return;
+
+            const officialWins = s.wins || 0;
+            const officialGames = s.games || 0;
+            const baseline = seasonBaselines[seasonId] || { wins: 0, games: 0 };
+
+            const deltaGames = officialGames - baseline.games;
+            const deltaWins = officialWins - baseline.wins;
+
+            // Ignoramos deltas negativos (glitches puntuales de la API o de
+            // Riot) en vez de restar partidas que ya contamos.
+            if (deltaGames > 0) {
+              const addedWins = Math.max(0, Math.min(deltaWins, deltaGames));
+              const addedLosses = deltaGames - addedWins;
+              wins += addedWins;
+              losses += addedLosses;
             }
+
+            seasonBaselines[seasonId] = { wins: officialWins, games: officialGames };
           });
         }
       }
@@ -115,7 +179,7 @@ async function buildStats(API_KEY, previousStats) {
       tier,
       elo,
       rankImage,
-      processedMatchIds: Array.from(processedMatchIds),
+      seasonBaselines,
       stats: {
         wins,
         losses,
@@ -143,9 +207,9 @@ export default async function handler(req, res) {
     // Permite resetear Redis pasando ?reset=true en la URL
     if (req.query.reset === 'true') {
       await redis.del('valorant:stats');
-      console.log("Redis reseteado con éxito.");
+      console.log('Redis reseteado con éxito.');
     }
-    
+
     const rawPrevious = await redis.get('valorant:stats');
     let previousData = null;
     if (rawPrevious) {
