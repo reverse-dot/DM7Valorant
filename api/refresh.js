@@ -40,7 +40,6 @@ async function buildStats(API_KEY, previousStats) {
     { name: 'Focus', tag: 'DM7', region: 'latam' },
   ];
 
-  // Mapeamos los datos previos guardados en Redis para no perder el acumulado
   const prevMap = {};
   if (previousStats && Array.isArray(previousStats.players)) {
     previousStats.players.forEach(p => {
@@ -59,7 +58,6 @@ async function buildStats(API_KEY, previousStats) {
     const playerKey = `${p.name}#${p.tag}`;
     const prevData = prevMap[playerKey] || {};
 
-    // Cargar historial previo de Redis
     let processedMatchIds = new Set(prevData.processedMatchIds || []);
     let wins = prevData.stats?.wins || 0;
     let losses = prevData.stats?.losses || 0;
@@ -72,7 +70,6 @@ async function buildStats(API_KEY, previousStats) {
     let rankImage = prevData.rankImage || '';
 
     try {
-      // Consultar partidas recientes
       const mmrHistoryUrl = `https://api.henrikdev.xyz/valorant/v1/mmr-history/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
       const mmrHistRes = await fetchWithRetry(mmrHistoryUrl, reqHeaders);
 
@@ -81,21 +78,19 @@ async function buildStats(API_KEY, previousStats) {
         const matchesList = histData.data || [];
 
         if (matchesList.length > 0) {
-          // El rango actual siempre se actualiza a la partida más reciente
           const latest = matchesList[0];
           rank = latest.currenttierpatched || rank;
           rr = latest.ranking_in_tier ?? rr;
           tier = latest.currenttier ?? tier;
           rankImage = rankImageFromTier(tier);
 
-          // Procesar partidas de la API y SUMAR SOLO LAS NUEVAS
-          // Se invierte la lista para procesar de la más antigua a la más nueva
+          // Recorremos las partidas recientes
           [...matchesList].reverse().forEach(m => {
-            const matchId = m.match_id;
+            // Generamos una clave ÚNICA basada en ID de partida o Fecha+RR
+            const matchUniqueKey = m.match_id || `${m.date_raw || m.date}-${m.ranking_in_tier}-${m.mmr_change_to_last_game}`;
             
-            // Si la partida NO ha sido contada antes en Redis, la registramos
-            if (matchId && !processedMatchIds.has(matchId)) {
-              processedMatchIds.add(matchId);
+            if (!processedMatchIds.has(matchUniqueKey)) {
+              processedMatchIds.add(matchUniqueKey);
               
               const change = m.mmr_change_to_last_game ?? 0;
               if (change > 0) wins++;
@@ -120,7 +115,7 @@ async function buildStats(API_KEY, previousStats) {
       tier,
       elo,
       rankImage,
-      processedMatchIds: Array.from(processedMatchIds), // Guardamos los IDs acumulados
+      processedMatchIds: Array.from(processedMatchIds),
       stats: {
         wins,
         losses,
@@ -144,18 +139,20 @@ export default async function handler(req, res) {
 
   try {
     const redis = getRedis();
+
+    // Permite resetear Redis pasando ?reset=true en la URL
+    if (req.query.reset === 'true') {
+      await redis.del('valorant:stats');
+      console.log("Redis reseteado con éxito.");
+    }
     
-    // 1. Leemos lo que ya teníamos guardado en Redis previamente
     const rawPrevious = await redis.get('valorant:stats');
     let previousData = null;
     if (rawPrevious) {
       previousData = typeof rawPrevious === 'string' ? JSON.parse(rawPrevious) : rawPrevious;
     }
 
-    // 2. Construimos las estadísticas sumando lo nuevo a lo anterior
     const data = await buildStats(API_KEY, previousData);
-
-    // 3. Sobreescribimos Redis con el nuevo acumulado
     await redis.set('valorant:stats', JSON.stringify(data));
 
     return res.status(200).json({ ok: true, updatedAt: data.updatedAt });
