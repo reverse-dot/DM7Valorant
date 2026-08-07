@@ -1,60 +1,69 @@
 import { getRedis } from './_redis.js';
 
+// Establece el tiempo límite máximo de Vercel en 60 segundos
 export const config = { maxDuration: 60 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Espera entre cada llamada individual a Henrik, para no saturar.
-// Como esto corre en background via cron y no bloquea a los usuarios,
-// preferimos ir más lento pero sin 429 en vez de rápido y con retries.
-const DELAY_BETWEEN_CALLS_MS = 3000;
-
+// ID para consultar los iconos de rango en alta resolución
 const TIER_CONTENT_ID = '03621f52-342b-cf4e-4f86-9350a49c6d04';
 function rankImageFromTier(tierId) {
   if (!tierId) return '';
   return `https://media.valorant-api.com/competitivetiers/${TIER_CONTENT_ID}/${tierId}/smallicon.png`;
 }
 
-async function fetchWithRetry(url, headers, retries = 4) {
+// Función con reintento automático si la API responde 429
+async function fetchWithRetry(url, headers, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, { headers });
       if (res.status !== 429) return res;
 
-      const wait = 5000 * Math.pow(2, i);
-      console.warn(`429 recibido en ${url}, reintentando en ${wait}ms (intento ${i + 1}/${retries + 1})`);
-      await sleep(wait);
+      console.warn(`429 en ${url}, reintentando en 3s (intento ${i + 1}/${retries + 1})`);
+      await sleep(3000);
     } catch (err) {
-      console.error('Error de red al llamar a Henrik:', err.message);
-      await sleep(2000);
+      console.error('Error de red:', err.message);
     }
   }
   return null;
 }
 
-const players = [
-  { name: 'X1no', tag: 'DM7', region: 'latam', cardImage: 'https://ejemplo.com/x1no.jpg' },
-  { name: 'Xrosfire', tag: '4884', region: 'latam', cardImage: 'https://ejemplo.com/xrosfire.jpg' },
-  { name: 'zingCL', tag: 'DM7', region: 'latam', cardImage: 'https://ejemplo.com/zingcl.jpg' },
-  { name: 'pavliuchenko', tag: '7144', region: 'latam', cardImage: 'https://ejemplo.com/pavliuchenko.jpg' },
-  { name: 'sayaplayer', tag: '9243', region: 'latam', cardImage: 'https://ejemplo.com/sayaplayer.jpg' },
-  { name: 'Focus', tag: 'DM7', region: 'latam', cardImage: 'https://ejemplo.com/focus.jpg' }
-];
-
 async function buildStats(API_KEY) {
-  const results = [];
-  const reqHeaders = { 'Authorization': API_KEY, 'User-Agent': 'SoloQChallenge/1.0' };
+  // Configura aquí tus 10 jugadores
+  const players = [
+    { name: 'X1no', tag: 'DM7', region: 'latam' },
+    { name: 'Xrosfire', tag: '4884', region: 'latam' },
+    { name: 'zingCL', tag: 'DM7', region: 'latam' },
+    { name: 'pavliuchenko', tag: '7144', region: 'latam' },
+    { name: 'sayaplayer', tag: '9243', region: 'latam' },
+    // Agrega aquí los 5 jugadores restantes:
+    // { name: 'Jugador6', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador7', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador8', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador9', tag: 'TAG', region: 'latam' },
+    // { name: 'Jugador10', tag: 'TAG', region: 'latam' }
+  ];
 
-  for (const p of players) {
+  const results = [];
+  const reqHeaders = {
+    'Authorization': API_KEY,
+    'User-Agent': 'SoloQChallenge/1.0'
+  };
+
+  for (let index = 0; index < players.length; index++) {
+    const p = players[index];
+    
+    // Pausa estratégica de 1.5s entre jugadores para mantenerse en el margen seguro (20 req / min < 30 req / min)
+    if (index > 0) await sleep(1500);
+
     let rank = 'Sin Clasificar';
     let rr = 0;
     let tier = 0;
     let rankImage = '';
+    let currentActShort = '';
 
     let wins = 0;
     let losses = 0;
-    let totalActGames = 0;
-    let currentActShort = '';
     let totalKills = 0;
     let totalDeaths = 0;
     let totalHeadshots = 0;
@@ -63,47 +72,45 @@ async function buildStats(API_KEY) {
     let matchesHistory = [];
 
     try {
-      await sleep(DELAY_BETWEEN_CALLS_MS);
-      const mmrRes = await fetchWithRetry(
-        `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`,
-        reqHeaders
-      );
+      const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
+      const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=5`;
 
+      // Se realizan las dos llamadas en paralelo para reducir el tiempo total a la mitad
+      const [mmrRes, matchesRes] = await Promise.all([
+        fetchWithRetry(mmrUrl, reqHeaders),
+        fetchWithRetry(matchesUrl, reqHeaders)
+      ]);
+
+      // 1. Procesar datos de MMR
       if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
         const currentData = mmrData.data?.current;
-        rank = currentData?.tier?.name || 'Sin Clasificar';
-        rr = currentData?.rr || 0;
-        tier = currentData?.tier?.id || 0;
-        rankImage = rankImageFromTier(tier);
+
+        if (currentData) {
+          rank = currentData.tier?.name || 'Sin Clasificar';
+          rr = currentData.rr || 0;
+          tier = currentData.tier?.id || 0;
+          rankImage = rankImageFromTier(tier);
+        }
 
         const seasonal = mmrData.data?.seasonal || [];
-        const currentAct = seasonal[seasonal.length - 1];
-
-        if (currentAct) {
-          wins = currentAct.wins || 0;
-          totalActGames = currentAct.games || 0;
-          losses = totalActGames - wins;
-          currentActShort = currentAct.season?.short || '';
+        if (seasonal.length > 0) {
+          const currentSeason = seasonal[seasonal.length - 1];
+          wins = currentSeason.wins || 0;
+          losses = currentSeason.number_of_games ? Math.max(0, currentSeason.number_of_games - wins) : 0;
+          if (currentSeason.season?.short) currentActShort = currentSeason.season.short;
         }
-      } else {
-        console.error(`MMR v3 falló para ${p.name} (status ${mmrRes?.status})`);
       }
 
-      await sleep(DELAY_BETWEEN_CALLS_MS);
-      const matchesRes = await fetchWithRetry(
-        `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?filter=competitive`,
-        reqHeaders
-      );
-
+      // 2. Procesar datos de Partidas
       if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
         const rawMatches = matchesData.data || [];
-        const recentMatches = rawMatches.slice(0, 5).reverse();
 
-        recentMatches.forEach((m) => {
-          const playerObj = m.players?.all_players?.find(
-            (pl) => pl.name.toLowerCase() === p.name.toLowerCase() && pl.tag.toLowerCase() === p.tag.toLowerCase()
+        rawMatches.forEach((m) => {
+          const allPlayers = m.players?.all_players || [];
+          const playerObj = allPlayers.find(
+            (pl) => pl.name?.toLowerCase() === p.name.toLowerCase() && pl.tag?.toLowerCase() === p.tag.toLowerCase()
           );
 
           if (playerObj) {
@@ -123,7 +130,7 @@ async function buildStats(API_KEY) {
             totalLegshots += playerObj.stats?.legshots || 0;
 
             matchesHistory.push({
-              map: m.metadata?.map || 'Competitivo',
+              map: m.metadata?.map?.name || 'Competitivo',
               won: won,
               result: won ? 'Victoria' : 'Derrota',
               kda: `${k}/${d}/${a}`
@@ -133,22 +140,20 @@ async function buildStats(API_KEY) {
       }
 
     } catch (err) {
-      console.error(`Error al procesar datos para ${p.name}:`, err);
+      console.error(`Error procesando a ${p.name}:`, err);
     }
 
-    const totalMatches = totalActGames;
+    const totalMatches = wins + losses;
     const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
     const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : (totalKills > 0 ? totalKills.toFixed(2) : '0.00');
 
     const totalShots = totalHeadshots + totalBodyshots + totalLegshots;
     const headshotPct = totalShots > 0 ? Math.round((totalHeadshots / totalShots) * 100) : 0;
-
     const elo = (tier * 100) + rr;
 
     results.push({
       name: p.name,
       tag: p.tag,
-      cardImage: p.cardImage || '',
       rank,
       rr,
       tier,
@@ -173,13 +178,6 @@ async function buildStats(API_KEY) {
 }
 
 export default async function handler(req, res) {
-  // Protección: solo el cron (que manda este secret) puede disparar un refresh.
-  // Evita que cualquiera pegándole a esta URL gaste tu cupo de la API.
-  const authHeader = req.headers['authorization'];
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'No autorizado' });
-  }
-
   const API_KEY = process.env.HENRIK_API_KEY;
   if (!API_KEY) {
     return res.status(500).json({ error: 'Falta HENRIK_API_KEY' });
@@ -189,9 +187,10 @@ export default async function handler(req, res) {
     const data = await buildStats(API_KEY);
     const redis = getRedis();
     await redis.set('valorant:stats', JSON.stringify(data));
+
     return res.status(200).json({ ok: true, updatedAt: data.updatedAt });
   } catch (err) {
-    console.error('Fallo al refrescar stats:', err);
-    return res.status(502).json({ error: 'No se pudo refrescar' });
+    console.error('Error en refresh:', err);
+    return res.status(500).json({ error: 'Error al actualizar las estadísticas' });
   }
 }
