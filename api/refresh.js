@@ -30,7 +30,7 @@ async function fetchWithRetry(url, headers, retries = 2) {
   return null;
 }
 
-async function buildStats(API_KEY) {
+async function buildStats(API_KEY, previousStats) {
   const players = [
     { name: 'X1no', tag: 'DM7', region: 'latam' },
     { name: 'Xrosfire', tag: '4884', region: 'latam' },
@@ -40,6 +40,14 @@ async function buildStats(API_KEY) {
     { name: 'Focus', tag: 'DM7', region: 'latam' },
   ];
 
+  // Mapeamos los datos previos guardados en Redis para no perder el acumulado
+  const prevMap = {};
+  if (previousStats && Array.isArray(previousStats.players)) {
+    previousStats.players.forEach(p => {
+      prevMap[`${p.name}#${p.tag}`] = p;
+    });
+  }
+
   const results = [];
   const reqHeaders = {
     'Authorization': API_KEY,
@@ -48,21 +56,23 @@ async function buildStats(API_KEY) {
 
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
-    
-    // Pausa de 3 segundos entre jugadores (Cero errores 429)
+    const playerKey = `${p.name}#${p.tag}`;
+    const prevData = prevMap[playerKey] || {};
+
+    // Cargar historial previo de Redis
+    let processedMatchIds = new Set(prevData.processedMatchIds || []);
+    let wins = prevData.stats?.wins || 0;
+    let losses = prevData.stats?.losses || 0;
+
     if (index > 0) await sleep(3000);
 
-    let rank = 'Sin Clasificar';
-    let rr = 0;
-    let tier = 0;
-    let rankImage = '';
-    let currentActShort = '';
-
-    let wins = 0;
-    let losses = 0;
+    let rank = prevData.rank || 'Sin Clasificar';
+    let rr = prevData.rr || 0;
+    let tier = prevData.tier || 0;
+    let rankImage = prevData.rankImage || '';
 
     try {
-      // 1. Petición a MMR History (devuelve las partidas recientes y el historial de RR)
+      // Consultar partidas recientes
       const mmrHistoryUrl = `https://api.henrikdev.xyz/valorant/v1/mmr-history/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
       const mmrHistRes = await fetchWithRetry(mmrHistoryUrl, reqHeaders);
 
@@ -71,41 +81,29 @@ async function buildStats(API_KEY) {
         const matchesList = histData.data || [];
 
         if (matchesList.length > 0) {
-          // Extraer Rango y RR actual de la partida más reciente
+          // El rango actual siempre se actualiza a la partida más reciente
           const latest = matchesList[0];
-          rank = latest.currenttierpatched || 'Sin Clasificar';
-          rr = latest.ranking_in_tier ?? 0;
-          tier = latest.currenttier ?? 0;
+          rank = latest.currenttierpatched || rank;
+          rr = latest.ranking_in_tier ?? rr;
+          tier = latest.currenttier ?? tier;
           rankImage = rankImageFromTier(tier);
 
-          // Contar Victorias y Derrotas del historial
-          matchesList.forEach(m => {
-            const change = m.mmr_change_to_last_game ?? 0;
-            if (change > 0) {
-              wins++;
-            } else if (change < 0) {
-              losses++;
+          // Procesar partidas de la API y SUMAR SOLO LAS NUEVAS
+          // Se invierte la lista para procesar de la más antigua a la más nueva
+          [...matchesList].reverse().forEach(m => {
+            const matchId = m.match_id;
+            
+            // Si la partida NO ha sido contada antes en Redis, la registramos
+            if (matchId && !processedMatchIds.has(matchId)) {
+              processedMatchIds.add(matchId);
+              
+              const change = m.mmr_change_to_last_game ?? 0;
+              if (change > 0) wins++;
+              else if (change < 0) losses++;
             }
           });
         }
       }
-
-      // Si por alguna razón mmr-history no trae rango, consultamos mmr como respaldo rápido
-      if (tier === 0) {
-        const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
-        const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
-        if (mmrRes && mmrRes.ok) {
-          const mmrData = await mmrRes.json();
-          const currentData = mmrData.data?.current;
-          if (currentData) {
-            rank = currentData.tier?.name || 'Sin Clasificar';
-            rr = currentData.rr || 0;
-            tier = currentData.tier?.id || 0;
-            rankImage = rankImageFromTier(tier);
-          }
-        }
-      }
-
     } catch (err) {
       console.error(`Error procesando a ${p.name}:`, err);
     }
@@ -122,16 +120,14 @@ async function buildStats(API_KEY) {
       tier,
       elo,
       rankImage,
-      act: currentActShort,
+      processedMatchIds: Array.from(processedMatchIds), // Guardamos los IDs acumulados
       stats: {
         wins,
         losses,
-        hasRealLosses: true,
         totalMatches,
         winrate: winRate,
         kd: '0.00',
-        headshotPct: 0,
-        hs: 0
+        headshotPct: 0
       },
       matches: []
     });
@@ -147,8 +143,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const data = await buildStats(API_KEY);
     const redis = getRedis();
+    
+    // 1. Leemos lo que ya teníamos guardado en Redis previamente
+    const rawPrevious = await redis.get('valorant:stats');
+    let previousData = null;
+    if (rawPrevious) {
+      previousData = typeof rawPrevious === 'string' ? JSON.parse(rawPrevious) : rawPrevious;
+    }
+
+    // 2. Construimos las estadísticas sumando lo nuevo a lo anterior
+    const data = await buildStats(API_KEY, previousData);
+
+    // 3. Sobreescribimos Redis con el nuevo acumulado
     await redis.set('valorant:stats', JSON.stringify(data));
 
     return res.status(200).json({ ok: true, updatedAt: data.updatedAt });
