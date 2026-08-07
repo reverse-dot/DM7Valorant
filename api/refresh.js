@@ -16,8 +16,8 @@ async function fetchWithRetry(url, headers, retries = 2) {
       const res = await fetch(url, { headers });
 
       if (res.status === 429) {
-        const retryAfter = Number(res.headers.get("Retry-After") || 8);
-        console.warn(`429 Limite - esperando ${retryAfter}s...`);
+        const retryAfter = Number(res.headers.get("Retry-After") || 6);
+        console.warn(`429 Límite alcanzado. Esperando ${retryAfter}s...`);
         await sleep(retryAfter * 1000);
         continue;
       }
@@ -49,8 +49,8 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    // Pausa segura de 3 segundos entre peticiones para NO superar el límite de 429
-    if (index > 0) await sleep(3000);
+    // Pausa de 3.5 segundos entre jugadores para asegurar CERO 429
+    if (index > 0) await sleep(3500);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
@@ -60,10 +60,8 @@ async function buildStats(API_KEY) {
 
     let wins = 0;
     let losses = 0;
-    let numberofgames = 0;
 
     try {
-      // UNICA PETICION POR JUGADOR (CERO 429)
       const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
       const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
 
@@ -71,7 +69,7 @@ async function buildStats(API_KEY) {
         const mmrData = await mmrRes.json();
         const currentData = mmrData.data?.current;
 
-        // 1. Extraer Rango y RR exactos
+        // 1. Datos de Rango y RR
         if (currentData) {
           rank = currentData.tier?.name || 'Sin Clasificar';
           rr = currentData.rr || 0;
@@ -79,24 +77,27 @@ async function buildStats(API_KEY) {
           rankImage = rankImageFromTier(tier);
         }
 
-        // 2. Extraer Victorias y Partidas del Acto actual
+        // 2. Extraer datos de la temporada
         const seasonal = mmrData.data?.seasonal || [];
         if (seasonal.length > 0) {
-          const currentSeason = seasonal[seasonal.length - 1];
-          
-          wins = Number(currentSeason.wins ?? 0);
-          numberofgames = Number(currentSeason.number_of_games ?? 0);
-          
-          // Si Henrik nos da el total de partidas, calculamos derrotas exactas:
-          if (numberofgames > 0 && numberofgames >= wins) {
-            losses = numberofgames - wins;
-          } else {
-            // Si la API no trae total de partidas del acto, asigna 0 temporalmente
-            losses = 0; 
-          }
+          // Buscamos el elemento de la temporada actual que tenga datos
+          const activeSeason = seasonal.findLast(s => (s.number_of_games ?? 0) > 0 || (s.wins ?? 0) > 0) || seasonal[seasonal.length - 1];
 
-          if (currentSeason.season?.short) {
-            currentActShort = currentSeason.season.short;
+          if (activeSeason) {
+            wins = Number(activeSeason.wins ?? 0);
+            const totalGames = Number(activeSeason.number_of_games ?? 0);
+
+            // Si number_of_games viene presente en la respuesta
+            if (totalGames > 0 && totalGames >= wins) {
+              losses = totalGames - wins;
+            } else {
+              // Si no viene totalGames en esta versión de API, calculamos con un fallback dinámico
+              losses = activeSeason.losses ? Number(activeSeason.losses) : 0;
+            }
+
+            if (activeSeason.season?.short) {
+              currentActShort = activeSeason.season.short;
+            }
           }
         }
       }
@@ -121,10 +122,10 @@ async function buildStats(API_KEY) {
       stats: {
         wins,
         losses,
-        hasRealLosses: true,
+        hasRealLosses: losses > 0,
         totalMatches,
         winrate: winRate,
-        kd: '0.00', // Desactivado para evitar peticiones extras
+        kd: '0.00',
         headshotPct: 0,
         hs: 0
       },
