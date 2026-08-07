@@ -17,20 +17,16 @@ async function fetchWithRetry(url, headers, retries = 1) {
 
       if (res.status === 429) {
         const retryAfter = Number(res.headers.get("Retry-After") || 5);
-
         console.warn(`429 - esperando ${retryAfter}s`);
-
         await sleep(retryAfter * 1000);
         continue;
       }
 
       return res;
-
     } catch (err) {
       console.error("Error de red:", err.message);
     }
   }
-
   return null;
 }
 
@@ -42,7 +38,6 @@ async function buildStats(API_KEY) {
     { name: 'pavliuchenko', tag: '7144', region: 'latam' },
     { name: 'sayaplayer', tag: '9243', region: 'latam' },
     { name: 'Focus', tag: 'DM7', region: 'latam' },
-    // Agrega aquí a los próximos 5 jugadores cuando se unan
   ];
 
   const results = [];
@@ -54,7 +49,7 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-   if (index > 0) await sleep(1000);
+    if (index > 0) await sleep(1000);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
@@ -62,8 +57,8 @@ async function buildStats(API_KEY) {
     let rankImage = '';
     let currentActShort = '';
 
- let actWins = 0;
-let actLosses = null;
+    let actWins = 0;
+    let actLosses = 0;
 
     let totalKills = 0;
     let totalDeaths = 0;
@@ -74,18 +69,15 @@ let actLosses = null;
 
     try {
       const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
-      const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=10`;
+      // Pedimos 35 partidas para asegurar cubrir todo el historial del Acto actual
+      const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=35`;
 
-    const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
+      const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
+      const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
 
-const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
-
-      // 1. MMR y Victorias del Acto
+      // 1. Datos de MMR y Rango actual
       if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
-       console.log(
- JSON.stringify(mmrData.data.seasonal, null, 2)
-);
         const currentData = mmrData.data?.current;
 
         if (currentData) {
@@ -95,40 +87,22 @@ const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
           rankImage = rankImageFromTier(tier);
         }
 
-       const seasonal = mmrData.data?.seasonal || [];
-
-if (seasonal.length > 0) {
-  const currentSeason = seasonal[seasonal.length - 1];
-
-  const seasonWins = Number(currentSeason.wins ?? 0);
-
-  const totalGames = Number(
-    currentSeason.games ??
-    currentSeason.number_of_games ??
-    currentSeason.games_played ??
-    currentSeason.total_games ??
-    0
-  );
-
-  if (totalGames > 0) {
-    actWins = seasonWins;
-    actLosses = totalGames - seasonWins;
-  } else {
-    actWins = seasonWins;
-    actLosses = null;
-  }
-
-  if (currentSeason.season?.short) {
-    currentActShort = currentSeason.season.short;
-  }
-}
+        const seasonal = mmrData.data?.seasonal || [];
+        if (seasonal.length > 0) {
+          const currentSeason = seasonal[seasonal.length - 1];
+          if (currentSeason.season?.short) {
+            currentActShort = currentSeason.season.short;
+          }
+        }
       }
 
-      
-
+      // 2. Conteo preciso de Victorias y Derrotas desde el historial
       if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
         const rawMatches = matchesData.data || [];
+
+        let calculatedWins = 0;
+        let calculatedLosses = 0;
 
         rawMatches.forEach((m) => {
           const allPlayers = m.players?.all_players || [];
@@ -140,9 +114,16 @@ if (seasonal.length > 0) {
             const playerTeam = playerObj.team?.toLowerCase();
             const redWon = m.teams?.red?.has_won;
             const blueWon = m.teams?.blue?.has_won;
+            
+            // Determinar si el jugador ganó o perdió
             const won = (playerTeam === 'red' && redWon) || (playerTeam === 'blue' && blueWon);
+            const isDraw = redWon === false && blueWon === false;
 
-  
+            if (won) {
+              calculatedWins++;
+            } else if (!isDraw) {
+              calculatedLosses++;
+            }
 
             const k = playerObj.stats?.kills || 0;
             const d = playerObj.stats?.deaths || 0;
@@ -164,26 +145,19 @@ if (seasonal.length > 0) {
             }
           }
         });
-      }
 
+        actWins = calculatedWins;
+        actLosses = calculatedLosses;
+      }
 
     } catch (err) {
       console.error(`Error procesando a ${p.name}:`, err);
     }
 
-  const wins = actWins;
-const losses = actLosses;
-
-let totalMatches = null;
-let winRate = null;
-
-if (losses !== null) {
-  totalMatches = wins + losses;
-
-  winRate = totalMatches > 0
-    ? Math.round((wins / totalMatches) * 100)
-    : 0;
-}
+    const wins = actWins;
+    const losses = actLosses;
+    const totalMatches = wins + losses;
+    const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
 
     const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : (totalKills > 0 ? totalKills.toFixed(2) : '0.00');
     const totalShots = totalHeadshots + totalBodyshots + totalLegshots;
@@ -191,27 +165,26 @@ if (losses !== null) {
     const elo = (tier * 100) + rr;
 
     results.push({
-  name: p.name,
-  tag: p.tag,
-  rank,
-  rr,
-  tier,
-  elo,
-  rankImage,
-  act: currentActShort,
-  stats: {
-    wins,
-    losses: losses ?? 0,
-    hasRealLosses: losses !== null,
-    totalMatches,
-    winrate: winRate,
-    kd,
-    headshotPct,
-    hs: headshotPct
-  },
-
-  matches: matchesHistory.reverse()
-});
+      name: p.name,
+      tag: p.tag,
+      rank,
+      rr,
+      tier,
+      elo,
+      rankImage,
+      act: currentActShort,
+      stats: {
+        wins,
+        losses,
+        hasRealLosses: true,
+        totalMatches,
+        winrate: winRate,
+        kd,
+        headshotPct,
+        hs: headshotPct
+      },
+      matches: matchesHistory.reverse()
+    });
   }
 
   return { updatedAt: new Date().toISOString(), players: results };
