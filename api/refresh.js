@@ -97,28 +97,36 @@ const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
           rankImage = rankImageFromTier(tier);
         }
 
-        const seasonal = mmrData.data?.seasonal || [];
-        if (seasonal.length > 0) {
-          const currentSeason = seasonal[seasonal.length - 1];
-          actWins = currentSeason.wins || 0;
-          
-        const totalGames = Number(
+       const seasonal = mmrData.data?.seasonal || [];
+
+if (seasonal.length > 0) {
+  const currentSeason = seasonal[seasonal.length - 1];
+
+  const seasonWins = Number(currentSeason.wins ?? 0);
+
+  const totalGames = Number(
+    currentSeason.games ??
     currentSeason.number_of_games ??
     currentSeason.games_played ??
+    currentSeason.total_games ??
     0
-);
+  );
 
-if (totalGames > 0 && totalGames >= actWins) {
-    actLosses = totalGames - actWins;
+  if (totalGames > 0) {
+    actWins = seasonWins;
+    actLosses = totalGames - seasonWins;
+  } else {
+    actWins = seasonWins;
+    actLosses = null;
+  }
+
+  if (currentSeason.season?.short) {
+    currentActShort = currentSeason.season.short;
+  }
 }
-
-          if (currentSeason.season?.short) currentActShort = currentSeason.season.short;
-        }
       }
 
-      // 2. Partidas Recientes e Historial
-      let historyWins = 0;
-      let historyLosses = 0;
+      
 
       if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
@@ -136,8 +144,7 @@ if (totalGames > 0 && totalGames >= actWins) {
             const blueWon = m.teams?.blue?.has_won;
             const won = (playerTeam === 'red' && redWon) || (playerTeam === 'blue' && blueWon);
 
-            if (won) historyWins++;
-            else historyLosses++;
+  
 
             const k = playerObj.stats?.kills || 0;
             const d = playerObj.stats?.deaths || 0;
@@ -166,17 +173,18 @@ if (totalGames > 0 && totalGames >= actWins) {
       console.error(`Error procesando a ${p.name}:`, err);
     }
 
-    const wins = actWins;
+  const wins = actWins;
 const losses = actLosses;
 
 let totalMatches = null;
 let winRate = null;
 
 if (losses !== null) {
-    totalMatches = wins + losses;
-    winRate = totalMatches > 0
-        ? Math.round((wins / totalMatches) * 100)
-        : 0;
+  totalMatches = wins + losses;
+
+  winRate = totalMatches > 0
+    ? Math.round((wins / totalMatches) * 100)
+    : 0;
 }
 
     const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : (totalKills > 0 ? totalKills.toFixed(2) : '0.00');
@@ -185,27 +193,27 @@ if (losses !== null) {
     const elo = (tier * 100) + rr;
 
     results.push({
-      name: p.name,
-      tag: p.tag,
-      rank,
-      rr,
-      tier,
-      elo,
-      rankImage,
-      act: currentActShort,
-      stats: {
-        wins,
-    losses,
+  name: p.name,
+  tag: p.tag,
+  rank,
+  rr,
+  tier,
+  elo,
+  rankImage,
+  act: currentActShort,
+  stats: {
+    wins,
+    losses: losses ?? 0,
     hasRealLosses: losses !== null,
     totalMatches,
     winrate: winRate,
-    winRate: winRate,
-        kd,
-        headshotPct,
-        hs: headshotPct
-      },
-      matches: matchesHistory.reverse()
-    });
+    kd,
+    headshotPct,
+    hs: headshotPct
+  },
+
+  matches: matchesHistory.reverse()
+});
   }
 
   return { updatedAt: new Date().toISOString(), players: results };
