@@ -14,14 +14,23 @@ async function fetchWithRetry(url, headers, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, { headers });
-      if (res.status !== 429) return res;
 
-      console.warn(`429 en ${url}, reintentando en 3s...`);
-      await sleep(3000);
+      if (res.status === 429) {
+        const retryAfter = Number(res.headers.get("Retry-After") || 5);
+
+        console.warn(`429 - esperando ${retryAfter}s`);
+
+        await sleep(retryAfter * 1000);
+        continue;
+      }
+
+      return res;
+
     } catch (err) {
-      console.error('Error de red:', err.message);
+      console.error("Error de red:", err.message);
     }
   }
+
   return null;
 }
 
@@ -45,7 +54,7 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    if (index > 0) await sleep(1200);
+   if (index > 0) await sleep(3000);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
@@ -67,10 +76,11 @@ let actLosses = null;
       const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
       const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=10`;
 
-      const [mmrRes, matchesRes] = await Promise.all([
-        fetchWithRetry(mmrUrl, reqHeaders),
-        fetchWithRetry(matchesUrl, reqHeaders)
-      ]);
+    const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
+
+await sleep(2000);
+
+const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
 
       // 1. MMR y Victorias del Acto
       if (mmrRes && mmrRes.ok) {
