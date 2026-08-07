@@ -10,7 +10,7 @@ function rankImageFromTier(tierId) {
   return `https://media.valorant-api.com/competitivetiers/${TIER_CONTENT_ID}/${tierId}/smallicon.png`;
 }
 
-async function fetchWithRetry(url, headers, retries = 2) {
+async function fetchWithRetry(url, headers, retries = 1) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, { headers });
@@ -54,7 +54,7 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-   if (index > 0) await sleep(3000);
+   if (index > 0) await sleep(1000);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
@@ -77,8 +77,6 @@ let actLosses = null;
       const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=10`;
 
     const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
-
-await sleep(2000);
 
 const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
 
