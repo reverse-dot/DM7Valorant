@@ -163,6 +163,7 @@ async function buildStats(API_KEY) {
       tier,
       elo,
       rankImage,
+      cardImage: p.cardImage || '',
       act: currentActShort,
       stats: {
         wins,
