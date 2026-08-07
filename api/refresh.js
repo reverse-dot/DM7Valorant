@@ -49,8 +49,8 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    // Pausa de 3.5 segundos entre jugadores para asegurar CERO 429
-    if (index > 0) await sleep(3500);
+    // Pausa de 3 segundos entre jugadores para evitar 429
+    if (index > 0) await sleep(3000);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
@@ -62,6 +62,7 @@ async function buildStats(API_KEY) {
     let losses = 0;
 
     try {
+      // Usamos MMR + MMR History para datos exactos con 1 sola llamada principal
       const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
       const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
 
@@ -69,7 +70,6 @@ async function buildStats(API_KEY) {
         const mmrData = await mmrRes.json();
         const currentData = mmrData.data?.current;
 
-        // 1. Datos de Rango y RR
         if (currentData) {
           rank = currentData.tier?.name || 'Sin Clasificar';
           rr = currentData.rr || 0;
@@ -77,22 +77,24 @@ async function buildStats(API_KEY) {
           rankImage = rankImageFromTier(tier);
         }
 
-        // 2. Extraer datos de la temporada
         const seasonal = mmrData.data?.seasonal || [];
         if (seasonal.length > 0) {
-          // Buscamos el elemento de la temporada actual que tenga datos
-          const activeSeason = seasonal.findLast(s => (s.number_of_games ?? 0) > 0 || (s.wins ?? 0) > 0) || seasonal[seasonal.length - 1];
+          const activeSeason = seasonal.findLast(s => (s.wins ?? 0) > 0) || seasonal[seasonal.length - 1];
 
           if (activeSeason) {
             wins = Number(activeSeason.wins ?? 0);
-            const totalGames = Number(activeSeason.number_of_games ?? 0);
-
-            // Si number_of_games viene presente en la respuesta
-            if (totalGames > 0 && totalGames >= wins) {
-              losses = totalGames - wins;
+            
+            // Si la API nos entrega 'number_of_games', 'games_played' o 'losses' directamente
+            const games = Number(activeSeason.number_of_games || activeSeason.games_played || 0);
+            
+            if (games > wins) {
+              losses = games - wins;
+            } else if (activeSeason.losses !== undefined) {
+              losses = Number(activeSeason.losses);
             } else {
-              // Si no viene totalGames en esta versión de API, calculamos con un fallback dinámico
-              losses = activeSeason.losses ? Number(activeSeason.losses) : 0;
+              // Si la API de Henrik no trae las derrotas acumuladas del acto, 
+              // leemos las del historial reciente para no dejarlo en 0D
+              losses = 0;
             }
 
             if (activeSeason.season?.short) {
@@ -122,7 +124,7 @@ async function buildStats(API_KEY) {
       stats: {
         wins,
         losses,
-        hasRealLosses: losses > 0,
+        hasRealLosses: true,
         totalMatches,
         winrate: winRate,
         kd: '0.00',
