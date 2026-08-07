@@ -31,63 +31,72 @@
   </script>
 </head>
 <body
-  class="min-h-screen font-sans text-ink px-5 pt-7 pb-16 bg-cover bg-center bg-fixed"
+  class="min-h-screen font-sans text-ink px-5 pt-7 pb-16 bg-cover bg-top"
   style="
     background-color: #08080b;
-    background-image: url('https://soloqchallenge.gg/assets/bg_home-GdTbtqNt.webp');
+    background-image: url('https://res.cloudinary.com/dmsvwqdi2/image/upload/v1786060742/atest_ykofwz.jpg');
   ">
 <div class="max-w-[1180px] mx-auto">
 
   <header class="flex items-end justify-between flex-wrap gap-4 mb-8 pb-5 border-b border-line">
-    <div>
-      <div class="text-[11px] tracking-[3px] text-valRed uppercase mb-1.5 font-bold">VALORANT · LAS COMPETITIVE GRIND</div>
+    <div class="flex gap-2"> 
+      <img src="https://res.cloudinary.com/cwtolx7o/image/upload/v1786062107/DM7-SOLOQ-VALO_peode9.webp" class="w-36 h-36">
+      <div class="flex-col flex justify-end">
       <h1 id="titleText" class="font-black text-[42px] tracking-[0.5px] leading-none uppercase">SoloQ Challenge</h1>
-      <div class="text-white/55 text-[13px] mt-2 font-semibold">Última actualización: <span id="lastUpdate">Cargando...</span></div>
+      <div class="text-[#38c98e] text-[13px] mt-2 font-semibold">Última actualización: <span id="lastUpdate">Cargando...</span></div>
+      </div>
     </div>
     <div class="bg-zinc-800/20 backdrop-blur-md border border-line rounded-[10px] px-[18px] py-3 text-center">
-      <div class="text-[10px] tracking-[2px] text-dim font-bold">EL CHALLENGE TERMINA EN</div>
-      <div class="text-[22px] font-bold text-gold mt-0.5" id="countdownVal">25d 02h 38m 19s</div>
+      <div class="text-[10px] tracking-[2px] text-[#38c98e] font-bold">EL CHALLENGE TERMINA EN</div>
+      <div class="text-[22px] font-bold text-white mt-0.5" id="countdownVal">25d 02h 38m 19s</div>
     </div>
   </header>
 
   <div id="podium" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-9"></div>
 
-  <div class="bg-panel/80 backdrop-blur-md border border-line rounded-xl p-4 mb-4 flex flex-col md:flex-row gap-4 justify-between items-center">
+  <div class="hidden mb-4 flex flex-col md:flex-row gap-4 justify-between items-center">
     <input 
       type="text" 
       id="searchInput" 
       placeholder="Buscar participante por Riot ID..." 
       oninput="handleSearch()"
-      class="w-full md:w-96 bg-black/40 border border-line rounded-lg px-4 py-2.5 text-sm text-ink focus:outline-none focus:border-valRed transition"
+      class="w-full md:w-96 bg-black/30 border border-line rounded-lg px-4 py-2.5 text-sm text-ink focus:outline-none focus:border-valRed transition"
     />
-    <div class="flex items-center gap-3 w-full md:w-auto justify-end">
-      <span class="text-xs text-dim font-semibold uppercase tracking-wider">Ordenar por:</span>
-      <select id="sortSelect" onchange="handleSortChange()" class="bg-black/40 border border-line rounded-lg px-3 py-2 text-sm text-ink focus:outline-none">
-        <option value="rr-desc">Posición (Rango / ELO)</option>
-        <option value="winrate-desc">Winrate (%)</option>
-        <option value="kd-desc">K/D Ratio</option>
-        <option value="hs-desc">HS %</option>
-        <option value="name-asc">Nombre (A-Z)</option>
-      </select>
-    </div>
   </div>
 
-  <div class="rounded-xl overflow-hidden overflow-x-auto border border-line bg-panel/60 backdrop-blur-md">
+  <div class="overflow-x-auto">
     <table id="table" class="w-full border-collapse min-w-[760px]">
       <thead>
-        <tr class="border-b border-line text-dim text-[11px] font-bold tracking-[1.5px] uppercase">
+        <tr class="border-b border-line text-dim text-[12px] font-bold tracking-[1.5px]  font-black">
           <th class="text-left px-4 py-3.5 w-12">#</th>
-          <th class="text-left px-4 py-3.5">Jugador</th>
-          <th class="text-left px-4 py-3.5">Rango / ELO</th>
-          <th class="text-left px-4 py-3.5">V / D (Winrate)</th>
-          <th class="text-left px-4 py-3.5">K/D</th>
-          <th class="text-left px-4 py-3.5">HS %</th>
-          <th class="text-left px-4 py-3.5">Últimas Partidas</th>
+          <th class="text-left px-4 py-3.5 font-black">Jugador</th>
+          <th class="text-left px-4 py-3.5" data-sort-key="elo">
+            <button type="button" onclick="toggleSort('elo')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
+              Rango / ELO <span data-arrow-for="elo"></span>
+            </button>
+          </th>
+          <th class="text-left px-4 py-3.5" data-sort-key="winrate">
+            <button type="button" onclick="toggleSort('winrate')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
+              V / D (Winrate) <span data-arrow-for="winrate"></span>
+            </button>
+          </th>
+          <th class="text-left px-4 py-3.5" data-sort-key="kd">
+            <button type="button" onclick="toggleSort('kd')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
+              K/D <span data-arrow-for="kd"></span>
+            </button>
+          </th>
+          <th class="text-left px-4 py-3.5" data-sort-key="hs">
+            <button type="button" onclick="toggleSort('hs')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
+              HS % <span data-arrow-for="hs"></span>
+            </button>
+          </th>
+          <th class="text-left px-4 py-3.5 font-black">Rachas</th>
         </tr>
       </thead>
       <tbody id="tbody"></tbody>
     </table>
   </div>
+
 
   <div id="emptyState" class="text-center py-16 px-5 text-dim">
     <b class="block text-ink font-bold text-lg mb-1.5">Cargando estadísticas de Valorant...</b>
@@ -97,6 +106,7 @@
 
 <script>
 let rawPlayersData = [];
+let sortState = { key: 'elo', dir: 'desc' };
 
 function initials(name){ return (name||'?').trim().slice(0,2).toUpperCase(); }
 
@@ -122,7 +132,6 @@ function renderMatchesBadge(matches) {
   let wins = 0;
   let losses = 0;
 
-  // 1. Calcular trayectoria de victorias / derrotas
   let currY = 16;
   let points = [{ x: paddingX, y: currY }];
 
@@ -131,25 +140,23 @@ function renderMatchesBadge(matches) {
     if (isWin) wins++; else losses++;
 
     if (idx > 0) {
-      currY += isWin ? -5 : 5; // Sube si gana, baja si pierde
+      currY += isWin ? -5 : 5;
       currY = Math.max(paddingY, Math.min(svgHeight - paddingY, currY));
       points.push({ x: paddingX + idx * stepX, y: currY });
     }
   });
 
-  // 2. Determinar si la tendencia global es Verde (Positiva) o Roja (Negativa)
   const isPositive = wins >= losses;
   const color = isPositive ? '#38c98e' : '#ef5761';
   const gradientId = `grad-${Math.random().toString(36).substr(2, 7)}`;
 
-  // 3. Puntos para la línea y el área sombreada
   const polylinePoints = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const firstP = points[0];
   const lastP = points[points.length - 1];
   const areaPoints = `${firstP.x.toFixed(1)},${svgHeight} ${polylinePoints} ${lastP.x.toFixed(1)},${svgHeight}`;
 
   return `
-    <div class="inline-flex items-center justify-center px-2 py-1 bg-black/40 rounded-lg border border-line" title="${wins}V - ${losses}D (${matches.length} partidas)">
+    <div class="inline-flex items-center justify-center px-2 py-1" title="${wins}V - ${losses}D (${matches.length} partidas)">
       <svg width="${svgWidth}" height="${svgHeight}" style="overflow: visible;">
         <defs>
           <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
@@ -186,7 +193,7 @@ function renderPodium(players) {
     const total = p.stats?.totalMatches || (wins + losses);
 
     const div = document.createElement('div');
-    div.className = `relative overflow-hidden bg-gradient-to-b from-panel2 to-panel border rounded-2xl p-[22px] md:${rankOrderClass[rank]} ` +
+    div.className = `relative overflow-hidden backdrop-blur-md bg-black/25 border rounded-2xl p-[22px] md:${rankOrderClass[rank]} ` +
       (rank === 1
         ? 'border-gold/40 before:content-[\'\'] before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_-20%,rgba(242,193,78,0.18),transparent_65%)] before:animate-glow before:pointer-events-none'
         : 'border-line');
@@ -209,7 +216,10 @@ function renderPodium(players) {
         <div><b class="block text-base">${wins}V ${losses}D</b><small class="text-dim text-[10.5px] tracking-[0.5px]">${total} PARTIDAS</small></div>
         <div class="text-right"><b class="block text-base">${wr}%</b><small class="text-dim text-[10.5px] tracking-[0.5px]">WINRATE</small></div>
       </div>
-      <div class="h-[5px] rounded-[3px] overflow-hidden flex mt-3 bg-loss relative z-[1]"><i class="block h-full bg-win" style="width:${wr}%"></i></div>
+      <div class="flex items-center gap-1 w-full mt-3 h-[6px] relative z-[1]">
+  <div class="h-full rounded-full border border-win/60 bg-win" style="width:${wr}%"></div>
+  <div class="h-full rounded-full border border-loss/60 bg-loss" style="width:${100 - wr}%"></div>
+</div>
     `;
     podium.appendChild(div);
   });
@@ -227,10 +237,10 @@ function renderTable(players) {
     const losses = p.stats?.losses || 0;
 
     const tr = document.createElement('tr');
-    tr.className = 'hover:bg-white/[0.02] border-b border-line/50 transition';
+    tr.className = 'hover:bg-white/5 transition';
     tr.innerHTML = `
-      <td class="px-4 py-4 align-middle font-bold text-[15px] ${rankColor}">${rank}</td>
-      <td class="px-4 py-4 align-middle">
+      <td class="px-4 py-3.5 align-middle font-bold text-[15px] ${rankColor}">${rank}</td>
+      <td class="px-4 py-3.5 align-middle">
         <div class="flex items-center gap-3">
           <div class="w-9 h-9 rounded-full flex-shrink-0 flex items-center justify-center font-bold text-xs text-white bg-zinc-800 border border-line">${initials(p.name)}</div>
           <div>
@@ -239,77 +249,121 @@ function renderTable(players) {
           </div>
         </div>
       </td>
-      <td class="px-4 py-4 align-middle">
+      <td class="px-4 py-3.5 align-middle">
         <div class="flex items-center gap-2.5">
-          ${p.rankImage ? `<img src="${p.rankImage}" class="w-8 h-8 object-contain" alt="${p.rank}">` : ''}
+          ${p.rankImage ? `<img src="${p.rankImage}" class="w-12 h-12 object-contain" alt="${p.rank}">` : ''}
           <div>
             <div class="font-bold text-[15px]">${p.rr} RR</div>
             <div class="text-[11px] text-dim font-medium capitalize">${p.rank}</div>
           </div>
         </div>
       </td>
-      <td class="px-4 py-4 align-middle">
+      <td class="px-4 py-3.5 align-middle">
         <div>
           <b class="text-win font-bold italic text-[14px]">${wr}%</b>
-          <span class="text-[11px] ml-1.5"><span class="text-win font-bold">${wins}V</span> <span class="text-dim">•</span> <span class="text-loss font-bold">${losses}D</span></span>
+          <span class="text-[11px] ml-1.5"><span class="text-win font-bold">${wins}V</span> <span class="text-dim">·</span> <span class="text-loss font-bold">${losses}D</span></span>
         </div>
-        <div class="flex items-center w-[120px] mt-1.5 h-[4px] bg-loss rounded-full overflow-hidden">
-          <div class="h-full bg-win" style="width:${wr}%"></div>
+        <div class="flex items-center gap-[3px] w-[130px] mt-1.5 h-[6px]">
+          <div class="h-full rounded-full border border-win/60 bg-win" style="width:${wr}%"></div>
+          <div class="h-full rounded-full border border-loss/60 bg-loss" style="width:${100 - wr}%"></div>
         </div>
       </td>
-      <td class="px-4 py-4 align-middle font-bold text-sm">${p.stats?.kd || '0.00'}</td>
-      <td class="px-4 py-4 align-middle font-bold text-sm text-purple">${p.stats?.headshotPct || p.stats?.hs || 0}%</td>
-      <td class="px-4 py-4 align-middle">${renderMatchesBadge(p.matches)}</td>
+      <td class="px-4 py-3.5 align-middle font-bold text-sm">${p.stats?.kd || '0.00'}</td>
+      <td class="px-4 py-3.5 align-middle font-bold text-sm">${p.stats?.headshotPct || p.stats?.hs || 0}%</td>
+      <td class="px-4 py-3.5 align-middle">${renderMatchesBadge(p.matches)}</td>
     `;
     tbody.appendChild(tr);
   });
 }
 
+function getElo(p) {
+  return p.elo !== undefined ? p.elo : ((p.tier || 0) * 100 + (p.rr || 0));
+}
+
 function processAndRender() {
   let list = [...rawPlayersData];
 
-  // Búsqueda por nombre o tag
   const query = document.getElementById('searchInput').value.toLowerCase().trim();
   if (query) {
     list = list.filter(p => p.name.toLowerCase().includes(query) || p.tag.toLowerCase().includes(query));
   }
 
-  // Ordenamiento correcto por ELO
-  const sortVal = document.getElementById('sortSelect').value;
-  list.sort((a, b) => {
-    if (sortVal === 'rr-desc') {
-      const eloA = a.elo !== undefined ? a.elo : ((a.tier || 0) * 100 + (a.rr || 0));
-      const eloB = b.elo !== undefined ? b.elo : ((b.tier || 0) * 100 + (b.rr || 0));
-      return eloB - eloA;
+  const podiumList = [...list].sort((a, b) => getElo(b) - getElo(a));
+
+  const tableList = [...list];
+  const { key, dir } = sortState;
+  const mult = dir === 'asc' ? 1 : -1;
+  tableList.sort((a, b) => {
+    let valA, valB;
+    if (key === 'elo') {
+      valA = getElo(a);
+      valB = getElo(b);
+    } else if (key === 'winrate') {
+      valA = a.stats?.winrate ?? a.stats?.winRate ?? 0;
+      valB = b.stats?.winrate ?? b.stats?.winRate ?? 0;
+    } else if (key === 'kd') {
+      valA = parseFloat(a.stats?.kd || 0);
+      valB = parseFloat(b.stats?.kd || 0);
+    } else if (key === 'hs') {
+      valA = a.stats?.headshotPct ?? a.stats?.hs ?? 0;
+      valB = b.stats?.headshotPct ?? b.stats?.hs ?? 0;
+    } else {
+      valA = 0;
+      valB = 0;
     }
-    if (sortVal === 'winrate-desc') return ((b.stats?.winrate || b.stats?.winRate || 0) - (a.stats?.winrate || a.stats?.winRate || 0));
-    if (sortVal === 'kd-desc') return parseFloat(b.stats?.kd || 0) - parseFloat(a.stats?.kd || 0);
-    if (sortVal === 'hs-desc') return (b.stats?.headshotPct || 0) - (a.stats?.headshotPct || 0);
-    if (sortVal === 'name-asc') return a.name.localeCompare(b.name);
-    return 0;
+    return (valA - valB) * mult;
   });
+
+  renderSortArrows();
 
   if (list.length === 0) {
     document.getElementById('table').style.display = 'none';
     document.getElementById('emptyState').innerHTML = '<b class="block text-ink font-bold text-lg">No se encontraron participantes.</b>';
     document.getElementById('emptyState').style.display = 'block';
+    document.getElementById('podium').innerHTML = '';
   } else {
     document.getElementById('table').style.display = 'table';
     document.getElementById('emptyState').style.display = 'none';
-    renderPodium(list);
-    renderTable(list);
+    renderPodium(podiumList);
+    renderTable(tableList);
   }
 }
 
 function handleSearch() { processAndRender(); }
-function handleSortChange() { processAndRender(); }
 
-// Cargar datos desde la API Vercel
+function toggleSort(key) {
+  if (sortState.key === key) {
+    sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
+  } else {
+    sortState = { key, dir: 'desc' };
+  }
+  processAndRender();
+}
+
+function renderSortArrows() {
+  document.querySelectorAll('[data-arrow-for]').forEach(el => {
+    const key = el.getAttribute('data-arrow-for');
+    const isActive = sortState.key === key;
+    const upActive = isActive && sortState.dir === 'asc';
+    const downActive = isActive && sortState.dir === 'desc';
+    el.innerHTML = `
+      <span class="inline-flex flex-col gap-[3px] justify-center">
+        <svg width="8" height="5" viewBox="0 0 8 5" class="${upActive ? 'fill-valRed' : 'fill-dim/40'} transition-colors">
+          <path d="M4 0L8 5H0L4 0Z"/>
+        </svg>
+        <svg width="8" height="5" viewBox="0 0 8 5" class="${downActive ? 'fill-valRed' : 'fill-dim/40'} transition-colors">
+          <path d="M4 5L0 0H8L4 5Z"/>
+        </svg>
+      </span>
+    `;
+  });
+}
+
 async function loadData() {
   try {
     const res = await fetch('/api/stats');
     if(!res.ok) throw new Error('Error al conectar con la API');
-    
+
     const data = await res.json();
     rawPlayersData = data.players || [];
 
