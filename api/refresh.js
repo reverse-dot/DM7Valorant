@@ -49,7 +49,7 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    // Pausa de 3 segundos entre jugadores para evitar 429
+    // Pausa de 3 segundos entre jugadores (Cero errores 429)
     if (index > 0) await sleep(3000);
 
     let rank = 'Sin Clasificar';
@@ -62,44 +62,46 @@ async function buildStats(API_KEY) {
     let losses = 0;
 
     try {
-      // Usamos MMR + MMR History para datos exactos con 1 sola llamada principal
-      const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
-      const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
+      // 1. Petición a MMR History (devuelve las partidas recientes y el historial de RR)
+      const mmrHistoryUrl = `https://api.henrikdev.xyz/valorant/v1/mmr-history/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
+      const mmrHistRes = await fetchWithRetry(mmrHistoryUrl, reqHeaders);
 
-      if (mmrRes && mmrRes.ok) {
-        const mmrData = await mmrRes.json();
-        const currentData = mmrData.data?.current;
+      if (mmrHistRes && mmrHistRes.ok) {
+        const histData = await mmrHistRes.json();
+        const matchesList = histData.data || [];
 
-        if (currentData) {
-          rank = currentData.tier?.name || 'Sin Clasificar';
-          rr = currentData.rr || 0;
-          tier = currentData.tier?.id || 0;
+        if (matchesList.length > 0) {
+          // Extraer Rango y RR actual de la partida más reciente
+          const latest = matchesList[0];
+          rank = latest.currenttierpatched || 'Sin Clasificar';
+          rr = latest.ranking_in_tier ?? 0;
+          tier = latest.currenttier ?? 0;
           rankImage = rankImageFromTier(tier);
+
+          // Contar Victorias y Derrotas del historial
+          matchesList.forEach(m => {
+            const change = m.mmr_change_to_last_game ?? 0;
+            if (change > 0) {
+              wins++;
+            } else if (change < 0) {
+              losses++;
+            }
+          });
         }
+      }
 
-        const seasonal = mmrData.data?.seasonal || [];
-        if (seasonal.length > 0) {
-          const activeSeason = seasonal.findLast(s => (s.wins ?? 0) > 0) || seasonal[seasonal.length - 1];
-
-          if (activeSeason) {
-            wins = Number(activeSeason.wins ?? 0);
-            
-            // Si la API nos entrega 'number_of_games', 'games_played' o 'losses' directamente
-            const games = Number(activeSeason.number_of_games || activeSeason.games_played || 0);
-            
-            if (games > wins) {
-              losses = games - wins;
-            } else if (activeSeason.losses !== undefined) {
-              losses = Number(activeSeason.losses);
-            } else {
-              // Si la API de Henrik no trae las derrotas acumuladas del acto, 
-              // leemos las del historial reciente para no dejarlo en 0D
-              losses = 0;
-            }
-
-            if (activeSeason.season?.short) {
-              currentActShort = activeSeason.season.short;
-            }
+      // Si por alguna razón mmr-history no trae rango, consultamos mmr como respaldo rápido
+      if (tier === 0) {
+        const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
+        const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
+        if (mmrRes && mmrRes.ok) {
+          const mmrData = await mmrRes.json();
+          const currentData = mmrData.data?.current;
+          if (currentData) {
+            rank = currentData.tier?.name || 'Sin Clasificar';
+            rr = currentData.rr || 0;
+            tier = currentData.tier?.id || 0;
+            rankImage = rankImageFromTier(tier);
           }
         }
       }
