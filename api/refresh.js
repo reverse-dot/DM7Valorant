@@ -33,7 +33,7 @@ async function buildStats(API_KEY) {
     { name: 'pavliuchenko', tag: '7144', region: 'latam' },
     { name: 'sayaplayer', tag: '9243', region: 'latam' },
     { name: 'Focus', tag: 'DM7', region: 'latam' },
-    // Agrega los demás jugadores aquí hasta 10
+    // Agrega aquí a los próximos 5 jugadores cuando se unan
   ];
 
   const results = [];
@@ -45,7 +45,7 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    if (index > 0) await sleep(1500);
+    if (index > 0) await sleep(1200);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
@@ -55,7 +55,7 @@ async function buildStats(API_KEY) {
 
     let actWins = 0;
     let actLosses = 0;
-    
+
     let totalKills = 0;
     let totalDeaths = 0;
     let totalHeadshots = 0;
@@ -65,15 +65,14 @@ async function buildStats(API_KEY) {
 
     try {
       const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
-      // Ampliamos el tamaño de partidas a 15-20 para calcular métricas más precisas del historial
-      const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=15`;
+      const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=10`;
 
       const [mmrRes, matchesRes] = await Promise.all([
         fetchWithRetry(mmrUrl, reqHeaders),
         fetchWithRetry(matchesUrl, reqHeaders)
       ]);
 
-      // 1. Procesar MMR y Victorias Totales del Acto
+      // 1. MMR y Victorias del Acto
       if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
         const currentData = mmrData.data?.current;
@@ -88,10 +87,8 @@ async function buildStats(API_KEY) {
         const seasonal = mmrData.data?.seasonal || [];
         if (seasonal.length > 0) {
           const currentSeason = seasonal[seasonal.length - 1];
-          // Victorias TOTALES oficiales del Acto provistas por la API
           actWins = currentSeason.wins || 0;
           
-          // Intentar obtener partidas totales si la API las provee
           const totalGames = currentSeason.number_of_games || currentSeason.games_played || 0;
           if (totalGames > actWins) {
             actLosses = totalGames - actWins;
@@ -101,7 +98,7 @@ async function buildStats(API_KEY) {
         }
       }
 
-      // 2. Procesar Historial de Partidas
+      // 2. Partidas Recientes e Historial
       let historyWins = 0;
       let historyLosses = 0;
 
@@ -134,7 +131,6 @@ async function buildStats(API_KEY) {
             totalBodyshots += playerObj.stats?.bodyshots || 0;
             totalLegshots += playerObj.stats?.legshots || 0;
 
-            // Guardamos las últimas 5 para la racha visual
             if (matchesHistory.length < 5) {
               matchesHistory.push({
                 map: m.metadata?.map?.name || 'Competitivo',
@@ -147,13 +143,11 @@ async function buildStats(API_KEY) {
         });
       }
 
-      // 3. CÁLCULO DE DERROTAS TOTALES REALES
-      // Si la API no dio total de juegos, calculamos la tasa de derrotas usando la proporción del historial descargado
+      // 3. Estimación Proporcional de Derrotas
       if (actLosses === 0) {
-        if (historyWins > 0) {
-          // Estimación proporcional exacta del Acto basado en su Winrate real de partidas recientes
-          const estimatedWinrate = historyWins / (historyWins + historyLosses);
-          const estimatedTotal = Math.round(actWins / estimatedWinrate);
+        if (historyWins > 0 && historyLosses > 0) {
+          const winrateProportion = historyWins / (historyWins + historyLosses);
+          const estimatedTotal = Math.round(actWins / winrateProportion);
           actLosses = Math.max(0, estimatedTotal - actWins);
         } else {
           actLosses = historyLosses;
@@ -168,7 +162,7 @@ async function buildStats(API_KEY) {
     const losses = actLosses;
     const totalMatches = wins + losses;
     const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
-    
+
     const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : (totalKills > 0 ? totalKills.toFixed(2) : '0.00');
     const totalShots = totalHeadshots + totalBodyshots + totalLegshots;
     const headshotPct = totalShots > 0 ? Math.round((totalHeadshots / totalShots) * 100) : 0;
@@ -193,7 +187,7 @@ async function buildStats(API_KEY) {
         headshotPct,
         hs: headshotPct
       },
-      matches: matchesHistory.reverse() // Para que el gráfico de rachas vaya de antigua a reciente
+      matches: matchesHistory.reverse()
     });
   }
 
