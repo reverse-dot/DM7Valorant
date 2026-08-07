@@ -83,8 +83,8 @@ const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
       // 1. MMR y Victorias del Acto
       if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
-        console.log(
-    JSON.stringify(mmrData.data.seasonal.at(-1), null, 2)
+       console.log(
+ JSON.stringify(mmrData.data.seasonal, null, 2)
 );
         const currentData = mmrData.data?.current;
 
