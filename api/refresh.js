@@ -1,25 +1,22 @@
 import { getRedis } from './_redis.js';
 
-// Establece el tiempo límite máximo de Vercel en 60 segundos
 export const config = { maxDuration: 60 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ID para consultar los iconos de rango en alta resolución
 const TIER_CONTENT_ID = '03621f52-342b-cf4e-4f86-9350a49c6d04';
 function rankImageFromTier(tierId) {
   if (!tierId) return '';
   return `https://media.valorant-api.com/competitivetiers/${TIER_CONTENT_ID}/${tierId}/smallicon.png`;
 }
 
-// Función con reintento automático si la API responde 429
 async function fetchWithRetry(url, headers, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, { headers });
       if (res.status !== 429) return res;
 
-      console.warn(`429 en ${url}, reintentando en 3s (intento ${i + 1}/${retries + 1})`);
+      console.warn(`429 en ${url}, reintentando en 3s...`);
       await sleep(3000);
     } catch (err) {
       console.error('Error de red:', err.message);
@@ -29,19 +26,13 @@ async function fetchWithRetry(url, headers, retries = 2) {
 }
 
 async function buildStats(API_KEY) {
-  // Configura aquí tus 10 jugadores
   const players = [
     { name: 'X1no', tag: 'DM7', region: 'latam' },
     { name: 'Xrosfire', tag: '4884', region: 'latam' },
     { name: 'zingCL', tag: 'DM7', region: 'latam' },
     { name: 'pavliuchenko', tag: '7144', region: 'latam' },
     { name: 'sayaplayer', tag: '9243', region: 'latam' },
-    // Agrega aquí los 5 jugadores restantes:
-    // { name: 'Jugador6', tag: 'TAG', region: 'latam' },
-    // { name: 'Jugador7', tag: 'TAG', region: 'latam' },
-    // { name: 'Jugador8', tag: 'TAG', region: 'latam' },
-    // { name: 'Jugador9', tag: 'TAG', region: 'latam' },
-    // { name: 'Jugador10', tag: 'TAG', region: 'latam' }
+    // Agrega los demás jugadores aquí
   ];
 
   const results = [];
@@ -53,7 +44,6 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    // Pausa estratégica de 1.5s entre jugadores para mantenerse en el margen seguro (20 req / min < 30 req / min)
     if (index > 0) await sleep(1500);
 
     let rank = 'Sin Clasificar';
@@ -75,13 +65,12 @@ async function buildStats(API_KEY) {
       const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
       const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=5`;
 
-      // Se realizan las dos llamadas en paralelo para reducir el tiempo total a la mitad
       const [mmrRes, matchesRes] = await Promise.all([
         fetchWithRetry(mmrUrl, reqHeaders),
         fetchWithRetry(matchesUrl, reqHeaders)
       ]);
 
-      // 1. Procesar datos de MMR
+      // 1. Procesar MMR y Victorias/Derrotas del Acto
       if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
         const currentData = mmrData.data?.current;
@@ -97,12 +86,22 @@ async function buildStats(API_KEY) {
         if (seasonal.length > 0) {
           const currentSeason = seasonal[seasonal.length - 1];
           wins = currentSeason.wins || 0;
-          losses = currentSeason.number_of_games ? Math.max(0, currentSeason.number_of_games - wins) : 0;
+          
+          const totalGames = currentSeason.number_of_games || currentSeason.games_played || 0;
+          if (totalGames > 0) {
+            losses = Math.max(0, totalGames - wins);
+          } else if (currentSeason.losses !== undefined) {
+            losses = currentSeason.losses;
+          }
+
           if (currentSeason.season?.short) currentActShort = currentSeason.season.short;
         }
       }
 
-      // 2. Procesar datos de Partidas
+      // 2. Procesar Partidas Recientes (para K/D, Headshot % y apoyo de Derrotas si no venían)
+      let recentWins = 0;
+      let recentLosses = 0;
+
       if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
         const rawMatches = matchesData.data || [];
@@ -118,6 +117,9 @@ async function buildStats(API_KEY) {
             const redWon = m.teams?.red?.has_won;
             const blueWon = m.teams?.blue?.has_won;
             const won = (playerTeam === 'red' && redWon) || (playerTeam === 'blue' && blueWon);
+
+            if (won) recentWins++;
+            else recentLosses++;
 
             const k = playerObj.stats?.kills || 0;
             const d = playerObj.stats?.deaths || 0;
@@ -137,6 +139,11 @@ async function buildStats(API_KEY) {
             });
           }
         });
+      }
+
+      // Respaldar derrotas con el conteo reciente si el perfil vino en 0 pero se detectaron derrotas
+      if (losses === 0 && wins > 0 && recentLosses > 0) {
+        losses = recentLosses;
       }
 
     } catch (err) {
