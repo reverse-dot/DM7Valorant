@@ -7,7 +7,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Espera entre cada llamada individual a Henrik, para no saturar.
 // Como esto ahora corre solo cada N minutos via cron (no por cada visita),
 // se puede bajar bastante sin riesgo.
-const DELAY_BETWEEN_CALLS_MS = 1200;
+const DELAY_BETWEEN_CALLS_MS = 3000;
 
 const TIER_CONTENT_ID = '03621f52-342b-cf4e-4f86-9350a49c6d04';
 function rankImageFromTier(tierId) {
