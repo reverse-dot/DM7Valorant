@@ -1,7 +1,6 @@
 import { getRedis } from './_redis.js';
 
-// Aumentamos la duración máxima permitida en Vercel Pro/Hobby
-export const config = { maxDuration: 300 };
+export const config = { maxDuration: 60 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -11,15 +10,14 @@ function rankImageFromTier(tierId) {
   return `https://media.valorant-api.com/competitivetiers/${TIER_CONTENT_ID}/${tierId}/smallicon.png`;
 }
 
-async function fetchWithRetry(url, headers, retries = 3) {
+async function fetchWithRetry(url, headers, retries = 2) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, { headers });
 
       if (res.status === 429) {
-        // Si nos da 429, leemos cuánto tiempo nos pide esperar Henrik o esperamos 12 segundos por defecto
-        const retryAfter = Number(res.headers.get("Retry-After") || 12);
-        console.warn(`429 Too Many Requests - esperando ${retryAfter}s para reintentar...`);
+        const retryAfter = Number(res.headers.get("Retry-After") || 5);
+        console.warn(`429 - esperando ${retryAfter}s para reintentar...`);
         await sleep(retryAfter * 1000);
         continue;
       }
@@ -51,17 +49,14 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    // Pausa de 3 segundos entre cada jugador para respetar los límites de Henrik API
-    if (index > 0) await sleep(3000);
+    // Pausa segura de 2.5s entre jugadores (suficiente porque solo hacemos 1 petición por jugador)
+    if (index > 0) await sleep(2500);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
     let tier = 0;
     let rankImage = '';
     let currentActShort = '';
-
-    let actWins = 0;
-    let actLosses = 0;
 
     let totalKills = 0;
     let totalDeaths = 0;
@@ -70,43 +65,18 @@ async function buildStats(API_KEY) {
     let totalLegshots = 0;
     let matchesHistory = [];
 
-    try {
-      const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
-      const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=35`;
+    let calculatedWins = 0;
+    let calculatedLosses = 0;
 
-      const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
-      await sleep(2000); // Pausa entre la llamada de MMR y la de Partidas
+    try {
+      // SOLO UNA PETICIÓN: Obtenemos las últimas 35 partidas competitivas
+      const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=35`;
 
       const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
 
-      // 1. MMR y Rango actual
-      if (mmrRes && mmrRes.ok) {
-        const mmrData = await mmrRes.json();
-        const currentData = mmrData.data?.current;
-
-        if (currentData) {
-          rank = currentData.tier?.name || 'Sin Clasificar';
-          rr = currentData.rr || 0;
-          tier = currentData.tier?.id || 0;
-          rankImage = rankImageFromTier(tier);
-        }
-
-        const seasonal = mmrData.data?.seasonal || [];
-        if (seasonal.length > 0) {
-          const currentSeason = seasonal[seasonal.length - 1];
-          if (currentSeason.season?.short) {
-            currentActShort = currentSeason.season.short;
-          }
-        }
-      }
-
-      // 2. Conteo de Victorias y Derrotas reales
       if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
         const rawMatches = matchesData.data || [];
-
-        let calculatedWins = 0;
-        let calculatedLosses = 0;
 
         rawMatches.forEach((m) => {
           const allPlayers = m.players?.all_players || [];
@@ -115,6 +85,12 @@ async function buildStats(API_KEY) {
           );
 
           if (playerObj) {
+            // Extraer el rango del jugador de la partida más reciente si no lo tenemos aún
+            if (tier === 0 && playerObj.tier) {
+              tier = playerObj.tier;
+              rankImage = rankImageFromTier(tier);
+            }
+
             const playerTeam = playerObj.team?.toLowerCase();
             const redWon = m.teams?.red?.has_won;
             const blueWon = m.teams?.blue?.has_won;
@@ -148,17 +124,14 @@ async function buildStats(API_KEY) {
             }
           }
         });
-
-        actWins = calculatedWins;
-        actLosses = calculatedLosses;
       }
 
     } catch (err) {
       console.error(`Error procesando a ${p.name}:`, err);
     }
 
-    const wins = actWins;
-    const losses = actLosses;
+    const wins = calculatedWins;
+    const losses = calculatedLosses;
     const totalMatches = wins + losses;
     const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
 
