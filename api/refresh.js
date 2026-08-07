@@ -1,6 +1,7 @@
 import { getRedis } from './_redis.js';
 
-export const config = { maxDuration: 60 };
+// Aumentamos la duración máxima permitida en Vercel Pro/Hobby
+export const config = { maxDuration: 300 };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -10,14 +11,15 @@ function rankImageFromTier(tierId) {
   return `https://media.valorant-api.com/competitivetiers/${TIER_CONTENT_ID}/${tierId}/smallicon.png`;
 }
 
-async function fetchWithRetry(url, headers, retries = 1) {
+async function fetchWithRetry(url, headers, retries = 3) {
   for (let i = 0; i <= retries; i++) {
     try {
       const res = await fetch(url, { headers });
 
       if (res.status === 429) {
-        const retryAfter = Number(res.headers.get("Retry-After") || 5);
-        console.warn(`429 - esperando ${retryAfter}s`);
+        // Si nos da 429, leemos cuánto tiempo nos pide esperar Henrik o esperamos 12 segundos por defecto
+        const retryAfter = Number(res.headers.get("Retry-After") || 12);
+        console.warn(`429 Too Many Requests - esperando ${retryAfter}s para reintentar...`);
         await sleep(retryAfter * 1000);
         continue;
       }
@@ -49,7 +51,8 @@ async function buildStats(API_KEY) {
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
     
-    if (index > 0) await sleep(1000);
+    // Pausa de 3 segundos entre cada jugador para respetar los límites de Henrik API
+    if (index > 0) await sleep(3000);
 
     let rank = 'Sin Clasificar';
     let rr = 0;
@@ -69,13 +72,14 @@ async function buildStats(API_KEY) {
 
     try {
       const mmrUrl = `https://api.henrikdev.xyz/valorant/v3/mmr/${p.region}/pc/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}`;
-      // Pedimos 35 partidas para asegurar cubrir todo el historial del Acto actual
       const matchesUrl = `https://api.henrikdev.xyz/valorant/v3/matches/${p.region}/${encodeURIComponent(p.name)}/${encodeURIComponent(p.tag)}?mode=competitive&size=35`;
 
       const mmrRes = await fetchWithRetry(mmrUrl, reqHeaders);
+      await sleep(2000); // Pausa entre la llamada de MMR y la de Partidas
+
       const matchesRes = await fetchWithRetry(matchesUrl, reqHeaders);
 
-      // 1. Datos de MMR y Rango actual
+      // 1. MMR y Rango actual
       if (mmrRes && mmrRes.ok) {
         const mmrData = await mmrRes.json();
         const currentData = mmrData.data?.current;
@@ -96,7 +100,7 @@ async function buildStats(API_KEY) {
         }
       }
 
-      // 2. Conteo preciso de Victorias y Derrotas desde el historial
+      // 2. Conteo de Victorias y Derrotas reales
       if (matchesRes && matchesRes.ok) {
         const matchesData = await matchesRes.json();
         const rawMatches = matchesData.data || [];
@@ -115,7 +119,6 @@ async function buildStats(API_KEY) {
             const redWon = m.teams?.red?.has_won;
             const blueWon = m.teams?.blue?.has_won;
             
-            // Determinar si el jugador ganó o perdió
             const won = (playerTeam === 'red' && redWon) || (playerTeam === 'blue' && blueWon);
             const isDraw = redWon === false && blueWon === false;
 
