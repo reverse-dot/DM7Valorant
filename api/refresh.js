@@ -5,8 +5,8 @@ export const config = { maxDuration: 60 };
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Espera entre cada llamada individual a Henrik, para no saturar.
-// Como esto ahora corre solo cada N minutos via cron (no por cada visita),
-// se puede bajar bastante sin riesgo.
+// Como esto corre en background via cron y no bloquea a los usuarios,
+// preferimos ir más lento pero sin 429 en vez de rápido y con retries.
 const DELAY_BETWEEN_CALLS_MS = 3000;
 
 const TIER_CONTENT_ID = '03621f52-342b-cf4e-4f86-9350a49c6d04';
@@ -33,12 +33,12 @@ async function fetchWithRetry(url, headers, retries = 4) {
 }
 
 const players = [
- { name: 'X1no', tag: 'DM7', region: 'latam', cardImage: 'https://www.reddit.com/media?url=https%3A%2F%2Fpreview.redd.it%2Fbro-i-hope-so-much-we-will-get-a-kunigami-episode-v0-s2oinv2dwcae1.png%3Fwidth%3D1080%26crop%3Dsmart%26auto%3Dwebp%26s%3Dfc3fdfb2f3d174d1731dc2a9897f8f934a823a76' },
-  { name: 'Xrosfire', tag: '4884', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/346136099027943434/f907376d139f25ff98003dc14e6930a3.webp?size=160' },
-  { name: 'zingCL', tag: 'DM7', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/168554778283081729/beecf04af89b8067a927a2a18d66ac6e.webp?size=160' },
-  { name: 'pavliuchenko', tag: '7144', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/309201004979683328/0996872fe3e066a0cdc5904c184b9a3a.webp?size=160' },
-  { name: 'sayaplayer', tag: '9243', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/205443962993901568/a88cc31d04ba149be3ac8c0cff146307.webp?size=160' },
-  { name: 'Focus', tag: 'DM7', region: 'latam', cardImage: 'https://cdn.discordapp.com/avatars/161309819809169411/f1cdfc36cff46a0265f72e59442cc4f5.webp?size=160' }
+  { name: 'X1no', tag: 'DM7', region: 'latam', cardImage: 'https://ejemplo.com/x1no.jpg' },
+  { name: 'Xrosfire', tag: '4884', region: 'latam', cardImage: 'https://ejemplo.com/xrosfire.jpg' },
+  { name: 'zingCL', tag: 'DM7', region: 'latam', cardImage: 'https://ejemplo.com/zingcl.jpg' },
+  { name: 'pavliuchenko', tag: '7144', region: 'latam', cardImage: 'https://ejemplo.com/pavliuchenko.jpg' },
+  { name: 'sayaplayer', tag: '9243', region: 'latam', cardImage: 'https://ejemplo.com/sayaplayer.jpg' },
+  { name: 'Focus', tag: 'DM7', region: 'latam', cardImage: 'https://ejemplo.com/focus.jpg' }
 ];
 
 async function buildStats(API_KEY) {
