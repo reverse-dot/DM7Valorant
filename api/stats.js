@@ -44,7 +44,8 @@ const players = [
   { name: 'Xrosfire', tag: '4884', region: 'latam' },
   { name: 'zingCL', tag: 'DM7', region: 'latam' },
   { name: 'pavliuchenko', tag: '7144', region: 'latam' },
-  { name: 'sayaplayer', tag: '9243', region: 'latam' }
+  { name: 'sayaplayer', tag: '9243', region: 'latam' },
+  { name: 'Focus', tag: 'DM7', region: 'latam' }
 ];
 
 // Hace TODO el trabajo pesado: recorre jugadores UNO POR UNO, con pausas entre cada llamada.
