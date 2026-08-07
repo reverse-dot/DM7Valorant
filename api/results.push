@@ -53,8 +53,8 @@ async function buildStats(API_KEY) {
     let rankImage = '';
     let currentActShort = '';
 
-    let actWins = 0;
-    let actLosses = 0;
+ let actWins = 0;
+let actLosses = null;
 
     let totalKills = 0;
     let totalDeaths = 0;
@@ -89,10 +89,15 @@ async function buildStats(API_KEY) {
           const currentSeason = seasonal[seasonal.length - 1];
           actWins = currentSeason.wins || 0;
           
-          const totalGames = currentSeason.number_of_games || currentSeason.games_played || 0;
-          if (totalGames > actWins) {
-            actLosses = totalGames - actWins;
-          }
+        const totalGames = Number(
+    currentSeason.number_of_games ??
+    currentSeason.games_played ??
+    0
+);
+
+if (totalGames > 0 && totalGames >= actWins) {
+    actLosses = totalGames - actWins;
+}
 
           if (currentSeason.season?.short) currentActShort = currentSeason.season.short;
         }
@@ -143,25 +148,23 @@ async function buildStats(API_KEY) {
         });
       }
 
-      // 3. Estimación Proporcional de Derrotas
-      if (actLosses === 0) {
-        if (historyWins > 0 && historyLosses > 0) {
-          const winrateProportion = historyWins / (historyWins + historyLosses);
-          const estimatedTotal = Math.round(actWins / winrateProportion);
-          actLosses = Math.max(0, estimatedTotal - actWins);
-        } else {
-          actLosses = historyLosses;
-        }
-      }
 
     } catch (err) {
       console.error(`Error procesando a ${p.name}:`, err);
     }
 
     const wins = actWins;
-    const losses = actLosses;
-    const totalMatches = wins + losses;
-    const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
+const losses = actLosses;
+
+let totalMatches = null;
+let winRate = null;
+
+if (losses !== null) {
+    totalMatches = wins + losses;
+    winRate = totalMatches > 0
+        ? Math.round((wins / totalMatches) * 100)
+        : 0;
+}
 
     const kd = totalDeaths > 0 ? (totalKills / totalDeaths).toFixed(2) : (totalKills > 0 ? totalKills.toFixed(2) : '0.00');
     const totalShots = totalHeadshots + totalBodyshots + totalLegshots;
@@ -179,10 +182,11 @@ async function buildStats(API_KEY) {
       act: currentActShort,
       stats: {
         wins,
-        losses,
-        totalMatches,
-        winrate: winRate,
-        winRate: winRate,
+    losses,
+    hasRealLosses: losses !== null,
+    totalMatches,
+    winrate: winRate,
+    winRate: winRate,
         kd,
         headshotPct,
         hs: headshotPct
