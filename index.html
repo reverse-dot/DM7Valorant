@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>SoloQ Challenge - Valorant</title>
+  <title>SoloQ Challenge · Valorant</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -14,10 +14,20 @@
         extend: {
           fontFamily: { sans: ['"Montserrat"', 'sans-serif'] },
           colors: {
-            bg: '#08080b', panel: '#0f0f15', panel2: '#131319', line: '#1e1e27',
-            ink: '#f2f2f5', dim: '#8b8b96',
-            gold: '#f2c14e', silver: '#c7d0da', bronze: '#d9884b',
-            purple: '#8b6ef2', win: '#38c98e', loss: '#ef5761', valRed: '#ff4655'
+            bg:           '#08080b',
+            panel:        '#0f0f15',
+            panel2:       '#131319',
+            'panel-border':'#1e1e27',
+            ink:          '#f2f2f5',
+            dim:          '#8b8b96',
+            dimmer:       '#5a5a64',
+            gold:         '#f2c14e',
+            silver:       '#c7d0da',
+            bronze:       '#d9884b',
+            win:          '#38c98e',
+            loss:         '#ef5761',
+            valRed:       '#ff4655',
+            'valRed-dim': '#cc3644',
           },
           keyframes: {
             glow: { '0%,100%': { opacity: 0.6 }, '50%': { opacity: 1 } },
@@ -29,92 +39,185 @@
       },
     };
   </script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { font-family: 'Montserrat', sans-serif; -webkit-font-smoothing: antialiased; }
+
+    /* ── Hover filas ── */
+    #tbody tr:hover { background: rgba(255,255,255,0.04); }
+    #tbody td { height: 58px; vertical-align: middle; }
+
+    /* ── Barra winrate ── */
+    .wl-bar { display:flex; gap:3px; height:5px; }
+    .bar-w { display:block; height:100%; border-radius:1px; background:rgba(56,201,142,0.85); }
+    .bar-d { display:block; height:100%; border-radius:1px; background:rgba(139,139,150,0.6); }
+    .bar-l { display:block; height:100%; border-radius:1px; background:rgba(239,87,97,0.85); }
+
+    /* ── Scroll tabla ── */
+    .table-scroll { overflow-x: auto; }
+    .table-scroll table { min-width: 820px; }
+
+    /* ── Tab activo / inactivo ── */
+    .tab-btn-active {
+      background: #ff4655;
+      color: #fff;
+      font-weight: 800;
+    }
+    .tab-btn-inactive {
+      background: #0f0f15;
+      border: 1px solid #1e1e27;
+      color: #8b8b96;
+      font-weight: 700;
+    }
+    .tab-btn-inactive:hover { color: #f2f2f5; }
+
+    /* ── Toast ── */
+    #toast {
+      position:fixed; bottom:32px; left:50%;
+      transform:translateX(-50%) translateY(20px);
+      background:#131319;
+      border:1px solid #2a2a38;
+      border-radius:12px;
+      padding:14px 22px;
+      z-index:200;
+      opacity:0;
+      transition:opacity .25s, transform .25s;
+      pointer-events:none;
+      font-size:13px;
+      white-space:nowrap;
+      box-shadow:0 8px 32px rgba(0,0,0,0.55);
+    }
+    #toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* ── Sort arrows accent ── */
+    .arrow-active { fill: #ff4655; }
+    .arrow-dim    { fill: rgba(139,139,150,0.35); }
+  </style>
 </head>
 <body
-  class="min-h-screen font-sans text-ink px-5 pt-7 pb-16 bg-cover bg-top"
+  class="min-h-screen font-sans text-ink"
   style="
     background-color: #08080b;
-    background-image: url('https://res.cloudinary.com/dmsvwqdi2/image/upload/v1786060742/atest_ykofwz.jpg');
+    background-image:
+      linear-gradient(rgba(8,8,11,0.82), rgba(8,8,11,0.82)),
+      url('https://res.cloudinary.com/dmsvwqdi2/image/upload/v1786060742/atest_ykofwz.jpg');
+    background-size: cover;
+    background-position: center;
+    background-attachment: fixed;
+    background-repeat: no-repeat;
   ">
-<div class="max-w-[1180px] mx-auto">
 
-  <header class="flex items-end justify-between flex-wrap gap-4 mb-8 pb-5 border-b border-line">
-    <div class="flex gap-2"> 
-      <img src="https://res.cloudinary.com/cwtolx7o/image/upload/v1786062107/DM7-SOLOQ-VALO_peode9.webp" class="w-36 h-36">
-      <div class="flex-col flex justify-end">
-      <h1 id="titleText" class="font-black text-[42px] tracking-[0.5px] leading-none uppercase">SoloQ Challenge</h1>
-      <div class="text-[#38c98e] text-[13px] mt-2 font-semibold">Última actualización: <span id="lastUpdate">Cargando...</span></div>
-      </div>
+<!-- ═══════════════════════════ NAVBAR ═══════════════════════════ -->
+<nav class="sticky top-0 z-40 bg-bg/80 backdrop-blur-md border-b border-panel-border">
+  <div class="max-w-[1440px] mx-auto px-12 max-md:px-4 h-16 flex items-center justify-between">
+
+    <!-- Logo -->
+    <a href="#" class="flex items-center gap-3 no-underline">
+      <img
+        src="https://res.cloudinary.com/cwtolx7o/image/upload/v1786062107/DM7-SOLOQ-VALO_peode9.webp"
+        class="w-9 h-9 object-contain rounded-xl"
+        alt="DM7 SoloQ">
+      <span class="font-black text-lg tracking-tight text-white">
+        SoloQ<span style="color:#ff4655">Challenge</span>
+      </span>
+    </a>
+
+    <!-- Right side: última actualización -->
+    <div class="flex items-center gap-2 text-[12px] text-dim">
+      <span style="color:#38c98e" class="font-bold">Última actualización:</span>
+      <span id="lastUpdate" class="font-semibold">Cargando…</span>
     </div>
-    <div class="bg-zinc-800/20 backdrop-blur-md border border-line rounded-[10px] px-[18px] py-3 text-center">
-      <div class="text-[10px] tracking-[2px] text-[#38c98e] font-bold">EL CHALLENGE TERMINA EN</div>
-      <div class="text-[22px] font-bold text-white mt-0.5" id="countdownVal">25d 02h 38m 19s</div>
+  </div>
+</nav>
+
+<!-- ═══════════════════════════ MAIN ═══════════════════════════ -->
+<div class="max-w-[1440px] mx-auto px-12 py-10 pb-20 max-md:px-4 max-md:py-6">
+
+  <!-- HEADER -->
+  <div class="flex items-end justify-between flex-wrap gap-5 mb-8">
+    <div>
+      <h1 class="text-7xl font-black tracking-tight leading-none mb-1 max-md:text-4xl">Ranking</h1>
+      <p class="text-sm text-dim">SoloQ Challenge · Valorant</p>
     </div>
-  </header>
 
-  <div id="podium" class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-9"></div>
-
-  <div class="hidden mb-4 flex flex-col md:flex-row gap-4 justify-between items-center">
-    <input 
-      type="text" 
-      id="searchInput" 
-      placeholder="Buscar participante por Riot ID..." 
-      oninput="handleSearch()"
-      class="w-full md:w-96 bg-black/30 border border-line rounded-lg px-4 py-2.5 text-sm text-ink focus:outline-none focus:border-valRed transition"
-    />
+    <!-- Countdown pill -->
+    <div class="flex items-center gap-3 bg-panel border border-panel-border rounded-xl px-5 py-3">
+      <span style="color:#ff4655" class="text-xl">⏱</span>
+      <span class="text-[11px] font-extrabold tracking-wide leading-tight max-w-[80px]" style="color:#ff4655">
+        EL CHALLENGE<br>TERMINA EN
+      </span>
+      <div id="countdownVal" class="font-extrabold text-2xl">-- d -- h -- m -- s</div>
+    </div>
   </div>
 
-  <div class="overflow-x-auto">
-    <table id="table" class="w-full border-collapse min-w-[760px]">
+  <!-- PODIUM -->
+  <div id="podium" class="grid grid-cols-3 gap-5 mb-9 max-md:grid-cols-1"></div>
+
+  <!-- CONTROLS -->
+  <div class="flex items-center gap-3 flex-wrap mb-4">
+    <!-- Search -->
+    <div class="flex items-center gap-2 bg-panel border border-panel-border rounded-lg px-3.5 py-2.5 min-w-[240px] text-dim">
+      <span>🔍</span>
+      <input
+        type="text"
+        id="searchInput"
+        placeholder="Buscar por Riot ID…"
+        oninput="handleSearch()"
+        class="bg-transparent border-none outline-none text-ink text-[13px] w-full placeholder:text-dim"
+      >
+    </div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="rounded-2xl overflow-hidden table-scroll">
+    <table id="table" class="w-full border-collapse">
       <thead>
-        <tr class="border-b border-line text-dim text-[12px] font-bold tracking-[1.5px]  font-black">
-          <th class="text-left px-4 py-3.5 w-12">#</th>
-          <th class="text-left px-4 py-3.5 font-black">Jugador</th>
-          <th class="text-left px-4 py-3.5" data-sort-key="elo">
-            <button type="button" onclick="toggleSort('elo')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
-              Rango / ELO <span data-arrow-for="elo"></span>
-            </button>
+        <tr>
+          <th class="text-left text-[11px] tracking-wide text-dimmer font-bold px-4 py-4 whitespace-nowrap select-none">#</th>
+          <th class="text-left text-[11px] tracking-wide text-dimmer font-bold px-4 py-4 whitespace-nowrap select-none">Jugador</th>
+          <th class="text-left text-[11px] tracking-wide text-dimmer font-bold px-4 py-4 whitespace-nowrap select-none cursor-pointer hover:text-dim"
+              onclick="toggleSort('elo')">
+            Rango / ELO <span data-arrow-for="elo"></span>
           </th>
-          <th class="text-left px-4 py-3.5" data-sort-key="winrate">
-            <button type="button" onclick="toggleSort('winrate')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
-              V / D (Winrate) <span data-arrow-for="winrate"></span>
-            </button>
+          <th class="text-left text-[11px] tracking-wide text-dimmer font-bold px-4 py-4 whitespace-nowrap select-none cursor-pointer hover:text-dim"
+              onclick="toggleSort('winrate')">
+            V / D (Winrate) <span data-arrow-for="winrate"></span>
           </th>
-          <th class="text-left px-4 py-3.5" data-sort-key="kd">
-            <button type="button" onclick="toggleSort('kd')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
-              K/D <span data-arrow-for="kd"></span>
-            </button>
+          <th class="text-left text-[11px] tracking-wide text-dimmer font-bold px-4 py-4 whitespace-nowrap select-none cursor-pointer hover:text-dim"
+              onclick="toggleSort('kd')">
+            K/D <span data-arrow-for="kd"></span>
           </th>
-          <th class="text-left px-4 py-3.5" data-sort-key="hs">
-            <button type="button" onclick="toggleSort('hs')" class="inline-flex items-center gap-1.5 hover:text-ink transition font-black">
-              HS % <span data-arrow-for="hs"></span>
-            </button>
+          <th class="text-left text-[11px] tracking-wide text-dimmer font-bold px-4 py-4 whitespace-nowrap select-none cursor-pointer hover:text-dim"
+              onclick="toggleSort('hs')">
+            HS% <span data-arrow-for="hs"></span>
           </th>
-          <th class="text-left px-4 py-3.5 font-black">Rachas</th>
+          <th class="text-left text-[11px] tracking-wide text-dimmer font-bold px-4 py-4 whitespace-nowrap select-none">Racha</th>
         </tr>
       </thead>
-      <tbody id="tbody"></tbody>
+      <tbody id="tbody">
+        <tr><td colspan="7" class="text-center py-16 text-dim">Cargando datos del ranking…</td></tr>
+      </tbody>
     </table>
-  </div>
-
-
-  <div id="emptyState" class="text-center py-16 px-5 text-dim">
-    <b class="block text-ink font-bold text-lg mb-1.5">Cargando estadísticas de Valorant...</b>
   </div>
 
 </div>
 
+<!-- TOAST -->
+<div id="toast"></div>
+
+<!-- ═══════════════════════════ SCRIPT ═══════════════════════════ -->
 <script>
 let rawPlayersData = [];
 let sortState = { key: 'elo', dir: 'desc' };
 
+/* ─── Helpers ─── */
 function initials(name){ return (name||'?').trim().slice(0,2).toUpperCase(); }
 
 function avatarHTML(p, sizeClasses){
   if (p.cardImage) {
-    return `<img src="${p.cardImage}" class="${sizeClasses} rounded-full flex-shrink-0 object-cover border-2 border-line" onerror="this.outerHTML='<div class=\\'${sizeClasses} rounded-full flex-shrink-0 flex items-center justify-center font-bold bg-[#2a2a38] text-white border-2 border-line\\'>${initials(p.name)}</div>'">`;
+    return `<img src="${p.cardImage}" class="${sizeClasses} rounded-full flex-shrink-0 object-cover border-2 border-panel-border" onerror="this.outerHTML='<div class=\\'${sizeClasses} rounded-full flex-shrink-0 flex items-center justify-center font-bold bg-[#2a2a38] text-white border-2 border-panel-border\\'>${initials(p.name)}</div>'">`;
   }
-  return `<div class="${sizeClasses} rounded-full flex-shrink-0 flex items-center justify-center font-bold bg-[#2a2a38] text-white border-2 border-line">${initials(p.name)}</div>`;
+  return `<div class="${sizeClasses} rounded-full flex-shrink-0 flex items-center justify-center font-bold bg-[#2a2a38] text-white border-2 border-panel-border">${initials(p.name)}</div>`;
 }
 
 function crestSVG(rank){
@@ -123,10 +226,19 @@ function crestSVG(rank){
   return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="10" r="7" fill="#d9884b"/><path d="M9 16L7 22L12 19L17 22L15 16" fill="#d9884b"/></svg>`;
 }
 
-// Normaliza el desenlace de una partida a 'win' | 'draw' | 'loss'.
-// Acepta la forma nueva (outcome) y la antigua en español (result), que venía
-// del script de GitHub Actions. Si no reconoce nada devuelve null: un desenlace
-// desconocido no se cuenta ni inclina la racha, en vez de asumirse derrota.
+/* ─── Barra winrate ─── */
+function winLossBar(wins, draws, losses, extraClass = '') {
+  const total = wins + draws + losses;
+  const pct = n => total > 0 ? (n / total * 100).toFixed(1) : 0;
+  let html = `<div class="wl-bar ${extraClass}" style="width:140px">`;
+  if (wins > 0)   html += `<span class="bar-w" style="width:${pct(wins)}%"></span>`;
+  if (draws > 0)  html += `<span class="bar-d" style="width:${pct(draws)}%"></span>`;
+  if (losses > 0) html += `<span class="bar-l" style="width:${pct(losses)}%"></span>`;
+  html += '</div>';
+  return html;
+}
+
+/* ─── Outcome normalizer (igual que el original) ─── */
 function outcomeOf(m) {
   if (m.outcome === 'win' || m.outcome === 'draw' || m.outcome === 'loss') return m.outcome;
   if (m.result === 'Victoria') return 'win';
@@ -136,112 +248,73 @@ function outcomeOf(m) {
   return null;
 }
 
-// Barra de tres tramos: victorias / empates / derrotas.
-// Los anchos salen de los conteos y no del winrate, así siempre suman 100%
-// sea cual sea la fórmula con la que el backend calcule el porcentaje.
-function winLossBar(wins, draws, losses, containerClasses) {
-  const total = wins + draws + losses;
-  const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
-  const seg = (n, cls) =>
-    n > 0 ? `<div class="h-full rounded-full border ${cls}" style="width:${pct(n)}%"></div>` : '';
-
-  return `
-    <div class="flex items-center h-[6px] ${containerClasses}">
-      ${seg(wins, 'border-win/60 bg-win')}
-      ${seg(draws, 'border-dim/60 bg-dim')}
-      ${seg(losses, 'border-loss/60 bg-loss')}
-    </div>`;
-}
-
+/* ─── Sparkline de racha (igual que el original) ─── */
 function renderMatchesBadge(matches) {
   if (!matches || matches.length === 0) {
     return `<span class="text-xs text-dim italic">sin partidas</span>`;
   }
-
-  const svgWidth = 90;
-  const svgHeight = 32;
-  const paddingX = 5;
-  const paddingY = 6;
-  const usableWidth = svgWidth - (paddingX * 2);
-  const total = matches.length;
-  const stepX = total > 1 ? usableWidth / (total - 1) : 0;
-
-  let wins = 0;
-  let draws = 0;
-  let losses = 0;
-
-  let currY = 16;
-  let points = [{ x: paddingX, y: currY }];
-  const drawPoints = [];
-
-  matches.forEach((m, idx) => {
-    const outcome = outcomeOf(m);
-    if (outcome === 'win') wins++;
-    else if (outcome === 'draw') draws++;
-    else if (outcome === 'loss') losses++;
-
-    if (idx > 0) {
-      // El empate (y el desenlace desconocido) no sube ni baja: tramo plano.
-      currY += outcome === 'win' ? -5 : outcome === 'loss' ? 5 : 0;
-      currY = Math.max(paddingY, Math.min(svgHeight - paddingY, currY));
-      const point = { x: paddingX + idx * stepX, y: currY };
+  const svgWidth=90,svgHeight=32,paddingX=5,paddingY=6;
+  const usableWidth=svgWidth-(paddingX*2);
+  const total=matches.length;
+  const stepX=total>1?usableWidth/(total-1):0;
+  let wins=0,draws=0,losses=0,currY=16;
+  let points=[{x:paddingX,y:currY}];
+  const drawPoints=[];
+  matches.forEach((m,idx)=>{
+    const outcome=outcomeOf(m);
+    if(outcome==='win')wins++;
+    else if(outcome==='draw')draws++;
+    else if(outcome==='loss')losses++;
+    if(idx>0){
+      currY+=outcome==='win'?-5:outcome==='loss'?5:0;
+      currY=Math.max(paddingY,Math.min(svgHeight-paddingY,currY));
+      const point={x:paddingX+idx*stepX,y:currY};
       points.push(point);
-      if (outcome === 'draw') drawPoints.push(point);
+      if(outcome==='draw')drawPoints.push(point);
     }
   });
-
-  const color = wins > losses ? '#38c98e' : losses > wins ? '#ef5761' : '#8b8b96';
-  const gradientId = `grad-${Math.random().toString(36).substr(2, 7)}`;
-
-  const polylinePoints = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
-  const firstP = points[0];
-  const lastP = points[points.length - 1];
-  const areaPoints = `${firstP.x.toFixed(1)},${svgHeight} ${polylinePoints} ${lastP.x.toFixed(1)},${svgHeight}`;
-
+  const color=wins>losses?'#38c98e':losses>wins?'#ef5761':'#8b8b96';
+  const gradientId=`grad-${Math.random().toString(36).substr(2,7)}`;
+  const polylinePoints=points.map(p=>`${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const firstP=points[0],lastP=points[points.length-1];
+  const areaPoints=`${firstP.x.toFixed(1)},${svgHeight} ${polylinePoints} ${lastP.x.toFixed(1)},${svgHeight}`;
   return `
     <div class="inline-flex items-center justify-center px-2 py-1" title="${wins}V - ${draws}E - ${losses}D (${matches.length} partidas)">
-      <svg width="${svgWidth}" height="${svgHeight}" style="overflow: visible;">
+      <svg width="${svgWidth}" height="${svgHeight}" style="overflow:visible;">
         <defs>
           <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="${color}" stop-opacity="0.4" />
-            <stop offset="100%" stop-color="${color}" stop-opacity="0.0" />
+            <stop offset="0%" stop-color="${color}" stop-opacity="0.4"/>
+            <stop offset="100%" stop-color="${color}" stop-opacity="0.0"/>
           </linearGradient>
         </defs>
-        <polygon points="${areaPoints}" fill="url(#${gradientId})" />
-        <polyline
-          fill="none"
-          stroke="${color}"
-          stroke-width="2"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-          points="${polylinePoints}"
-          style="filter: drop-shadow(0px 0px 3px ${color}80);"
-        />
-        ${drawPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#8b8b96" stroke="#08080b" stroke-width="1.5" />`).join('')}
-        <circle cx="${lastP.x.toFixed(1)}" cy="${lastP.y.toFixed(1)}" r="3" fill="${color}" stroke="#08080b" stroke-width="1.5" />
+        <polygon points="${areaPoints}" fill="url(#${gradientId})"/>
+        <polyline fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+          points="${polylinePoints}" style="filter:drop-shadow(0px 0px 3px ${color}80);"/>
+        ${drawPoints.map(p=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#8b8b96" stroke="#08080b" stroke-width="1.5"/>`).join('')}
+        <circle cx="${lastP.x.toFixed(1)}" cy="${lastP.y.toFixed(1)}" r="3" fill="${color}" stroke="#08080b" stroke-width="1.5"/>
       </svg>
-    </div>
-  `;
+    </div>`;
 }
 
+/* ─── Podio ─── */
 function renderPodium(players) {
   const podium = document.getElementById('podium');
   podium.innerHTML = '';
-  const rankOrderClass = { 1: 'order-2', 2: 'order-1', 3: 'order-3' };
+  const rankOrderClass = { 1:'order-2 md:scale-[1.04]', 2:'order-1', 3:'order-3' };
 
-  players.slice(0, 3).forEach((p, idx) => {
+  players.slice(0,3).forEach((p, idx) => {
     const rank = idx + 1;
-    const wr = p.stats?.winrate || p.stats?.winRate || 0;
-    const wins = p.stats?.wins || 0;
+    const wr    = p.stats?.winrate || p.stats?.winRate || 0;
+    const wins  = p.stats?.wins  || 0;
     const draws = p.stats?.draws ?? 0;
-    const losses = p.stats?.losses || 0;
+    const losses= p.stats?.losses|| 0;
     const total = p.stats?.totalMatches || (wins + draws + losses);
 
     const div = document.createElement('div');
-    div.className = `relative overflow-hidden backdrop-blur-md bg-black/25 border rounded-2xl p-[22px] md:${rankOrderClass[rank]} ` +
-      (rank === 1
-        ? 'border-gold/40 before:content-[\'\'] before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_-20%,rgba(242,193,78,0.18),transparent_65%)] before:animate-glow before:pointer-events-none'
-        : 'border-line');
+    div.className = `relative overflow-hidden backdrop-blur-md bg-black/25 border rounded-2xl p-[22px] md:${rankOrderClass[rank]} transition-transform ` +
+      (rank===1
+        ? 'border-gold/40 before:content-[\'\'] before:absolute before:inset-0 before:bg-[radial-gradient(circle_at_50%_-20%,rgba(242,193,78,0.16),transparent_65%)] before:animate-glow before:pointer-events-none'
+        : 'border-panel-border');
 
     div.innerHTML = `
       <div class="flex items-center gap-3 mb-[18px] relative z-[1]">
@@ -252,37 +325,44 @@ function renderPodium(players) {
           <div class="text-[11.5px] text-dim">#${p.tag}</div>
         </div>
       </div>
-      <div class="flex items-center gap-3 justify-center">
+      <div class="flex items-center gap-3 justify-center relative z-[1]">
         ${p.rankImage ? `<img src="${p.rankImage}" class="w-12 h-12 object-contain" alt="${p.rank}">` : ''}
-        <div class="font-bold text-[34px] flex items-center gap-1.5 justify-center">${p.rr} <span class="text-sm text-dim font-semibold">RR</span></div>
+        <div class="font-black text-[34px] flex items-center gap-1.5 justify-center">${p.rr} <span class="text-sm text-dim font-semibold">RR</span></div>
       </div>
-      <div class="text-center text-xs text-dim font-semibold uppercase tracking-wider mt-1">${p.rank}</div>
-      <div class="flex gap-[22px] mt-4 relative z-[1] justify-between">
-        <div><b class="block text-base">${wins}V ${draws}E ${losses}D</b><small class="text-dim text-[10.5px] tracking-[0.5px]">${total} PARTIDAS</small></div>
-        <div class="text-right"><b class="block text-base">${wr}%</b><small class="text-dim text-[10.5px] tracking-[0.5px]">WINRATE</small></div>
+      <div class="text-center text-xs text-dim font-semibold uppercase tracking-wider mt-1 relative z-[1]">${p.rank}</div>
+      <div class="flex gap-4 mt-4 relative z-[1] justify-between">
+        <div>
+          <b class="block text-base">${wins}V ${draws > 0 ? draws + 'E ' : ''}${losses}D</b>
+          <small class="text-dim text-[10.5px] tracking-[0.5px]">${total} PARTIDAS</small>
+        </div>
+        <div class="text-right">
+          <b class="block text-base" style="color:#38c98e">${wr}%</b>
+          <small class="text-dim text-[10.5px] tracking-[0.5px]">WINRATE</small>
+        </div>
       </div>
-      ${winLossBar(wins, draws, losses, 'gap-1 w-full mt-3 relative z-[1]')}
+      ${winLossBar(wins, draws, losses, 'w-full mt-3 relative z-[1]')}
     `;
     podium.appendChild(div);
   });
 }
 
+/* ─── Tabla ─── */
 function renderTable(players) {
   const tbody = document.getElementById('tbody');
   tbody.innerHTML = '';
 
   players.forEach((p, idx) => {
-    const rank = idx + 1;
-    const rankColor = rank===1?'text-gold':rank===2?'text-silver':rank===3?'text-bronze':'text-dim';
-    const wr = p.stats?.winrate || p.stats?.winRate || 0;
-    const wins = p.stats?.wins || 0;
+    const rank   = idx + 1;
+    const rankColor = rank===1?'color:#f2c14e':rank===2?'color:#c7d0da':rank===3?'color:#d9884b':'color:#8b8b96';
+    const wr    = p.stats?.winrate || p.stats?.winRate || 0;
+    const wins  = p.stats?.wins  || 0;
     const draws = p.stats?.draws ?? 0;
-    const losses = p.stats?.losses || 0;
+    const losses= p.stats?.losses|| 0;
 
     const tr = document.createElement('tr');
-    tr.className = 'hover:bg-white/5 transition';
+    tr.className = 'transition';
     tr.innerHTML = `
-      <td class="px-4 py-3.5 align-middle font-bold text-[15px] ${rankColor}">${rank}</td>
+      <td class="px-4 py-3.5 align-middle font-black text-[15px]" style="${rankColor}">${rank}</td>
       <td class="px-4 py-3.5 align-middle">
         <div class="flex items-center gap-3">
           ${avatarHTML(p, 'w-9 h-9 text-xs')}
@@ -294,7 +374,7 @@ function renderTable(players) {
       </td>
       <td class="px-4 py-3.5 align-middle">
         <div class="flex items-center gap-2.5">
-          ${p.rankImage ? `<img src="${p.rankImage}" class="w-12 h-12 object-contain" alt="${p.rank}">` : ''}
+          ${p.rankImage ? `<img src="${p.rankImage}" class="w-10 h-10 object-contain" alt="${p.rank}">` : ''}
           <div>
             <div class="font-bold text-[15px]">${p.rr} RR</div>
             <div class="text-[11px] text-dim font-medium capitalize">${p.rank}</div>
@@ -303,10 +383,16 @@ function renderTable(players) {
       </td>
       <td class="px-4 py-3.5 align-middle">
         <div>
-          <b class="text-win font-bold italic text-[14px]">${wr}%</b>
-          <span class="text-[11px] ml-1.5"><span class="text-win font-bold">${wins}V</span> <span class="text-dim">·</span> <span class="text-dim font-bold">${draws}E</span> <span class="text-dim">·</span> <span class="text-loss font-bold">${losses}D</span></span>
+          <b class="font-bold italic text-[14px]" style="color:#38c98e">${wr}%</b>
+          <span class="text-[11px] ml-1.5">
+            <span style="color:#38c98e" class="font-bold">${wins}V</span>
+            <span class="text-dim">·</span>
+            <span class="text-dim font-bold">${draws}E</span>
+            <span class="text-dim">·</span>
+            <span style="color:#ef5761" class="font-bold">${losses}D</span>
+          </span>
         </div>
-        ${winLossBar(wins, draws, losses, 'gap-[3px] w-[130px] mt-1.5')}
+        ${winLossBar(wins, draws, losses, 'mt-1.5')}
       </td>
       <td class="px-4 py-3.5 align-middle font-bold text-sm">${p.stats?.kd || '0.00'}</td>
       <td class="px-4 py-3.5 align-middle font-bold text-sm">${p.stats?.headshotPct || p.stats?.hs || 0}%</td>
@@ -316,42 +402,51 @@ function renderTable(players) {
   });
 }
 
+/* ─── Sort ─── */
 function getElo(p) {
-  return p.elo !== undefined ? p.elo : ((p.tier || 0) * 100 + (p.rr || 0));
+  return p.elo !== undefined ? p.elo : ((p.tier||0)*100 + (p.rr||0));
 }
 
+function renderSortArrows() {
+  document.querySelectorAll('[data-arrow-for]').forEach(el => {
+    const key = el.getAttribute('data-arrow-for');
+    const isActive  = sortState.key === key;
+    const upActive  = isActive && sortState.dir === 'asc';
+    const downActive= isActive && sortState.dir === 'desc';
+    el.innerHTML = `
+      <span class="inline-flex flex-col gap-[3px] justify-center ml-1">
+        <svg width="8" height="5" viewBox="0 0 8 5" class="${upActive   ? 'fill-valRed' : 'fill-dim/40'} transition-colors"><path d="M4 0L8 5H0L4 0Z"/></svg>
+        <svg width="8" height="5" viewBox="0 0 8 5" class="${downActive ? 'fill-valRed' : 'fill-dim/40'} transition-colors"><path d="M4 5L0 0H8L4 5Z"/></svg>
+      </span>`;
+  });
+}
+
+function toggleSort(key) {
+  sortState = sortState.key === key
+    ? { key, dir: sortState.dir === 'desc' ? 'asc' : 'desc' }
+    : { key, dir: 'desc' };
+  processAndRender();
+}
+
+/* ─── Render principal ─── */
 function processAndRender() {
   let list = [...rawPlayersData];
-
   const query = document.getElementById('searchInput').value.toLowerCase().trim();
-  if (query) {
-    list = list.filter(p => p.name.toLowerCase().includes(query) || p.tag.toLowerCase().includes(query));
-  }
+  if (query) list = list.filter(p => p.name.toLowerCase().includes(query) || p.tag.toLowerCase().includes(query));
 
-  const podiumList = [...list].sort((a, b) => getElo(b) - getElo(a));
+  const podiumList = [...list].sort((a,b) => getElo(b) - getElo(a));
 
   const tableList = [...list];
   const { key, dir } = sortState;
   const mult = dir === 'asc' ? 1 : -1;
-  tableList.sort((a, b) => {
-    let valA, valB;
-    if (key === 'elo') {
-      valA = getElo(a);
-      valB = getElo(b);
-    } else if (key === 'winrate') {
-      valA = a.stats?.winrate ?? a.stats?.winRate ?? 0;
-      valB = b.stats?.winrate ?? b.stats?.winRate ?? 0;
-    } else if (key === 'kd') {
-      valA = parseFloat(a.stats?.kd || 0);
-      valB = parseFloat(b.stats?.kd || 0);
-    } else if (key === 'hs') {
-      valA = a.stats?.headshotPct ?? a.stats?.hs ?? 0;
-      valB = b.stats?.headshotPct ?? b.stats?.hs ?? 0;
-    } else {
-      valA = 0;
-      valB = 0;
-    }
-    return (valA - valB) * mult;
+  tableList.sort((a,b) => {
+    let vA, vB;
+    if      (key==='elo')     { vA=getElo(a); vB=getElo(b); }
+    else if (key==='winrate') { vA=a.stats?.winrate??a.stats?.winRate??0; vB=b.stats?.winrate??b.stats?.winRate??0; }
+    else if (key==='kd')      { vA=parseFloat(a.stats?.kd||0); vB=parseFloat(b.stats?.kd||0); }
+    else if (key==='hs')      { vA=a.stats?.headshotPct??a.stats?.hs??0; vB=b.stats?.headshotPct??b.stats?.hs??0; }
+    else                      { vA=0; vB=0; }
+    return (vA-vB)*mult;
   });
 
   renderSortArrows();
@@ -363,7 +458,8 @@ function processAndRender() {
     document.getElementById('podium').innerHTML = '';
   } else {
     document.getElementById('table').style.display = 'table';
-    document.getElementById('emptyState').style.display = 'none';
+    const es = document.getElementById('emptyState');
+    if(es) es.style.display = 'none';
     renderPodium(podiumList);
     renderTable(tableList);
   }
@@ -371,55 +467,50 @@ function processAndRender() {
 
 function handleSearch() { processAndRender(); }
 
-function toggleSort(key) {
-  if (sortState.key === key) {
-    sortState.dir = sortState.dir === 'desc' ? 'asc' : 'desc';
-  } else {
-    sortState = { key, dir: 'desc' };
-  }
-  processAndRender();
-}
-
-function renderSortArrows() {
-  document.querySelectorAll('[data-arrow-for]').forEach(el => {
-    const key = el.getAttribute('data-arrow-for');
-    const isActive = sortState.key === key;
-    const upActive = isActive && sortState.dir === 'asc';
-    const downActive = isActive && sortState.dir === 'desc';
-    el.innerHTML = `
-      <span class="inline-flex flex-col gap-[3px] justify-center">
-        <svg width="8" height="5" viewBox="0 0 8 5" class="${upActive ? 'fill-valRed' : 'fill-dim/40'} transition-colors">
-          <path d="M4 0L8 5H0L4 0Z"/>
-        </svg>
-        <svg width="8" height="5" viewBox="0 0 8 5" class="${downActive ? 'fill-valRed' : 'fill-dim/40'} transition-colors">
-          <path d="M4 5L0 0H8L4 5Z"/>
-        </svg>
-      </span>
-    `;
-  });
-}
-
+/* ─── Carga de datos ─── */
 async function loadData() {
   try {
     const res = await fetch('/api/stats');
-    if(!res.ok) throw new Error('Error al conectar con la API');
-
+    if (!res.ok) throw new Error('API error');
     const data = await res.json();
     rawPlayersData = data.players || [];
 
     if (data.updatedAt) {
       const date = new Date(data.updatedAt);
-      document.getElementById('lastUpdate').textContent = date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+      document.getElementById('lastUpdate').textContent =
+        date.toLocaleTimeString('es-CL', { hour:'2-digit', minute:'2-digit' });
     }
-
     processAndRender();
-  } catch (err) {
+  } catch(err) {
     console.error(err);
-    document.getElementById('emptyState').innerHTML = '<b class="block text-valRed font-bold text-lg mb-1">Ocurrió un problema cargando los datos</b>Comprueba si el servidor respondió correctamente.';
+    const tbody = document.getElementById('tbody');
+    if(tbody) tbody.innerHTML = `<tr><td colspan="7" class="text-center py-16" style="color:#ef5761">Error al cargar los datos. Revisá la API.</td></tr>`;
   }
 }
 
+/* ─── Countdown ─── */
+(function startCountdown() {
+  const TARGET = new Date('2025-09-01T00:00:00-03:00');
+  function tick() {
+    const diff = TARGET - Date.now();
+    if (diff <= 0) { document.getElementById('countdownVal').textContent = '¡Terminó!'; return; }
+    const d = Math.floor(diff/86400000);
+    const h = Math.floor((diff%86400000)/3600000);
+    const m = Math.floor((diff%3600000)/60000);
+    const s = Math.floor((diff%60000)/1000);
+    document.getElementById('countdownVal').textContent =
+      `${d}d ${String(h).padStart(2,'0')}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
+  }
+  tick();
+  setInterval(tick, 1000);
+})();
+
 loadData();
 </script>
+
+<div id="emptyState" class="hidden text-center py-16 px-5 text-dim">
+  <b class="block text-ink font-bold text-lg mb-1.5">Cargando estadísticas de Valorant…</b>
+</div>
+
 </body>
 </html>
