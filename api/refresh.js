@@ -31,6 +31,14 @@ function cardImageFromId(cardId) {
 //   2 jugadores -> 12 + 22 = 34   NO CABE
 //   1 jugador   -> 12 + 11 = 23   cabe, con margen
 //
+// ROTACIÓN DE MMR (agregado para evitar timeout de 60s en Vercel):
+//
+// Procesar los 6 jugadores de MMR en una sola corrida tarda ~50-70s con los
+// sleeps incluidos, lo que mata la función. Con MMR_PER_RUN = 3, cada corrida
+// procesa la mitad y termina en ~20-25s. Los 6 se actualizan en 2 corridas
+// (30 min). Los jugadores que no les toca en esta corrida publican sus datos
+// anteriores desde prevData — nunca quedan en blanco.
+//
 // Por eso el matchlist rota: cada corrida lo pide para MATCHLIST_PER_RUN
 // jugadores y el resto conserva sus valores anteriores. Con el refresh
 // corriendo cada ~15 min, los 6 se renuevan cada ~90 min. Subir esta
@@ -38,7 +46,9 @@ function cardImageFromId(cardId) {
 // ---------------------------------------------------------------------------
 const MATCH_PAGE_SIZE = 10;
 const MATCHLIST_PER_RUN = 1;
+const MMR_PER_RUN = 3;
 const CURSOR_KEY = 'valorant:matchlist-cursor';
+const MMR_CURSOR_KEY = 'valorant:mmr-cursor';
 
 // Respeta Retry-After si HenrikDev nos tira 429, y si no viene, hace
 // backoff incremental con jitter para no pegarle todos los reintentos juntos.
@@ -231,7 +241,7 @@ async function fetchMatchStats(p, headers) {
   };
 }
 
-async function buildStats(API_KEY, previousStats, cursor) {
+async function buildStats(API_KEY, previousStats, cursor, mmrCursor) {
   const players = [
     { name: 'X1no', tag: 'DM7', region: 'latam' },
     { name: 'Xrosfire', tag: '4884', region: 'latam' },
@@ -255,11 +265,21 @@ async function buildStats(API_KEY, previousStats, cursor) {
     refreshMatches.add(`${t.name}#${t.tag}`);
   }
 
+  // Quiénes reciben actualización de MMR en esta corrida.
+  // Los demás publican sus datos anteriores desde prevData sin hacer fetch.
+  const refreshMMR = new Set();
+  for (let i = 0; i < Math.min(MMR_PER_RUN, players.length); i++) {
+    const t = players[(mmrCursor + i) % players.length];
+    refreshMMR.add(`${t.name}#${t.tag}`);
+  }
+
   const results = [];
   const reqHeaders = {
     'Authorization': API_KEY,
     'User-Agent': 'SoloQChallenge/1.0'
   };
+
+  let mmrCallIndex = 0;
 
   for (let index = 0; index < players.length; index++) {
     const p = players[index];
@@ -283,7 +303,21 @@ async function buildStats(API_KEY, previousStats, cursor) {
     let matches = Array.isArray(prevData.matches) ? prevData.matches : [];
     let cardImage = prevData.cardImage || '';
 
-    if (index > 0) await sleep(1500);
+    // Si este jugador no le toca MMR esta corrida, publicamos prevData directo.
+    if (!refreshMMR.has(playerKey)) {
+      const totalMatches = wins + draws + losses;
+      const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
+      const elo = (tier * 100) + rr;
+      results.push({
+        name: p.name, tag: p.tag, rank, rr, tier, elo, rankImage, cardImage,
+        stats: { wins, draws, losses, totalMatches, winrate: winRate, kd, headshotPct },
+        matches
+      });
+      continue;
+    }
+
+    if (mmrCallIndex > 0) await sleep(1500);
+    mmrCallIndex++;
 
     try {
       const current = await fetchCurrentSeasonStats(p, reqHeaders);
@@ -378,9 +412,14 @@ export default async function handler(req, res) {
     const rawCursor = await redis.get(CURSOR_KEY);
     const cursor = Number.isFinite(Number(rawCursor)) ? Number(rawCursor) : 0;
 
-    const data = await buildStats(API_KEY, previousData, cursor);
+    // Cursor de rotación del MMR: qué bloque de jugadores les toca esta corrida.
+    const rawMmrCursor = await redis.get(MMR_CURSOR_KEY);
+    const mmrCursor = Number.isFinite(Number(rawMmrCursor)) ? Number(rawMmrCursor) : 0;
+
+    const data = await buildStats(API_KEY, previousData, cursor, mmrCursor);
     await redis.set('valorant:stats', JSON.stringify(data));
     await redis.set(CURSOR_KEY, String((cursor + MATCHLIST_PER_RUN) % data.players.length));
+    await redis.set(MMR_CURSOR_KEY, String((mmrCursor + MMR_PER_RUN) % data.players.length));
 
     return res.status(200).json({ ok: true, updatedAt: data.updatedAt });
   } catch (err) {
