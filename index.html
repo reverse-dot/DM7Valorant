@@ -123,6 +123,36 @@ function crestSVG(rank){
   return `<svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="10" r="7" fill="#d9884b"/><path d="M9 16L7 22L12 19L17 22L15 16" fill="#d9884b"/></svg>`;
 }
 
+// Normaliza el desenlace de una partida a 'win' | 'draw' | 'loss'.
+// Acepta la forma nueva (outcome) y la antigua en español (result), que venía
+// del script de GitHub Actions. Si no reconoce nada devuelve null: un desenlace
+// desconocido no se cuenta ni inclina la racha, en vez de asumirse derrota.
+function outcomeOf(m) {
+  if (m.outcome === 'win' || m.outcome === 'draw' || m.outcome === 'loss') return m.outcome;
+  if (m.result === 'Victoria') return 'win';
+  if (m.result === 'Empate') return 'draw';
+  if (m.result === 'Derrota') return 'loss';
+  if (m.won === true) return 'win';
+  return null;
+}
+
+// Barra de tres tramos: victorias / empates / derrotas.
+// Los anchos salen de los conteos y no del winrate, así siempre suman 100%
+// sea cual sea la fórmula con la que el backend calcule el porcentaje.
+function winLossBar(wins, draws, losses, containerClasses) {
+  const total = wins + draws + losses;
+  const pct = (n) => (total > 0 ? (n / total) * 100 : 0);
+  const seg = (n, cls) =>
+    n > 0 ? `<div class="h-full rounded-full border ${cls}" style="width:${pct(n)}%"></div>` : '';
+
+  return `
+    <div class="flex items-center h-[6px] ${containerClasses}">
+      ${seg(wins, 'border-win/60 bg-win')}
+      ${seg(draws, 'border-dim/60 bg-dim')}
+      ${seg(losses, 'border-loss/60 bg-loss')}
+    </div>`;
+}
+
 function renderMatchesBadge(matches) {
   if (!matches || matches.length === 0) {
     return `<span class="text-xs text-dim italic">sin partidas</span>`;
@@ -137,24 +167,30 @@ function renderMatchesBadge(matches) {
   const stepX = total > 1 ? usableWidth / (total - 1) : 0;
 
   let wins = 0;
+  let draws = 0;
   let losses = 0;
 
   let currY = 16;
   let points = [{ x: paddingX, y: currY }];
+  const drawPoints = [];
 
   matches.forEach((m, idx) => {
-    const isWin = m.won || m.result === 'Victoria';
-    if (isWin) wins++; else losses++;
+    const outcome = outcomeOf(m);
+    if (outcome === 'win') wins++;
+    else if (outcome === 'draw') draws++;
+    else if (outcome === 'loss') losses++;
 
     if (idx > 0) {
-      currY += isWin ? -5 : 5;
+      // El empate (y el desenlace desconocido) no sube ni baja: tramo plano.
+      currY += outcome === 'win' ? -5 : outcome === 'loss' ? 5 : 0;
       currY = Math.max(paddingY, Math.min(svgHeight - paddingY, currY));
-      points.push({ x: paddingX + idx * stepX, y: currY });
+      const point = { x: paddingX + idx * stepX, y: currY };
+      points.push(point);
+      if (outcome === 'draw') drawPoints.push(point);
     }
   });
 
-  const isPositive = wins >= losses;
-  const color = isPositive ? '#38c98e' : '#ef5761';
+  const color = wins > losses ? '#38c98e' : losses > wins ? '#ef5761' : '#8b8b96';
   const gradientId = `grad-${Math.random().toString(36).substr(2, 7)}`;
 
   const polylinePoints = points.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
@@ -163,7 +199,7 @@ function renderMatchesBadge(matches) {
   const areaPoints = `${firstP.x.toFixed(1)},${svgHeight} ${polylinePoints} ${lastP.x.toFixed(1)},${svgHeight}`;
 
   return `
-    <div class="inline-flex items-center justify-center px-2 py-1" title="${wins}V - ${losses}D (${matches.length} partidas)">
+    <div class="inline-flex items-center justify-center px-2 py-1" title="${wins}V - ${draws}E - ${losses}D (${matches.length} partidas)">
       <svg width="${svgWidth}" height="${svgHeight}" style="overflow: visible;">
         <defs>
           <linearGradient id="${gradientId}" x1="0" y1="0" x2="0" y2="1">
@@ -181,6 +217,7 @@ function renderMatchesBadge(matches) {
           points="${polylinePoints}"
           style="filter: drop-shadow(0px 0px 3px ${color}80);"
         />
+        ${drawPoints.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="#8b8b96" stroke="#08080b" stroke-width="1.5" />`).join('')}
         <circle cx="${lastP.x.toFixed(1)}" cy="${lastP.y.toFixed(1)}" r="3" fill="${color}" stroke="#08080b" stroke-width="1.5" />
       </svg>
     </div>
@@ -196,8 +233,9 @@ function renderPodium(players) {
     const rank = idx + 1;
     const wr = p.stats?.winrate || p.stats?.winRate || 0;
     const wins = p.stats?.wins || 0;
+    const draws = p.stats?.draws ?? 0;
     const losses = p.stats?.losses || 0;
-    const total = p.stats?.totalMatches || (wins + losses);
+    const total = p.stats?.totalMatches || (wins + draws + losses);
 
     const div = document.createElement('div');
     div.className = `relative overflow-hidden backdrop-blur-md bg-black/25 border rounded-2xl p-[22px] md:${rankOrderClass[rank]} ` +
@@ -220,13 +258,10 @@ function renderPodium(players) {
       </div>
       <div class="text-center text-xs text-dim font-semibold uppercase tracking-wider mt-1">${p.rank}</div>
       <div class="flex gap-[22px] mt-4 relative z-[1] justify-between">
-        <div><b class="block text-base">${wins}V ${losses}D</b><small class="text-dim text-[10.5px] tracking-[0.5px]">${total} PARTIDAS</small></div>
+        <div><b class="block text-base">${wins}V ${draws}E ${losses}D</b><small class="text-dim text-[10.5px] tracking-[0.5px]">${total} PARTIDAS</small></div>
         <div class="text-right"><b class="block text-base">${wr}%</b><small class="text-dim text-[10.5px] tracking-[0.5px]">WINRATE</small></div>
       </div>
-      <div class="flex items-center gap-1 w-full mt-3 h-[6px] relative z-[1]">
-  <div class="h-full rounded-full border border-win/60 bg-win" style="width:${wr}%"></div>
-  <div class="h-full rounded-full border border-loss/60 bg-loss" style="width:${100 - wr}%"></div>
-</div>
+      ${winLossBar(wins, draws, losses, 'gap-1 w-full mt-3 relative z-[1]')}
     `;
     podium.appendChild(div);
   });
@@ -241,6 +276,7 @@ function renderTable(players) {
     const rankColor = rank===1?'text-gold':rank===2?'text-silver':rank===3?'text-bronze':'text-dim';
     const wr = p.stats?.winrate || p.stats?.winRate || 0;
     const wins = p.stats?.wins || 0;
+    const draws = p.stats?.draws ?? 0;
     const losses = p.stats?.losses || 0;
 
     const tr = document.createElement('tr');
@@ -268,12 +304,9 @@ function renderTable(players) {
       <td class="px-4 py-3.5 align-middle">
         <div>
           <b class="text-win font-bold italic text-[14px]">${wr}%</b>
-          <span class="text-[11px] ml-1.5"><span class="text-win font-bold">${wins}V</span> <span class="text-dim">·</span> <span class="text-loss font-bold">${losses}D</span></span>
+          <span class="text-[11px] ml-1.5"><span class="text-win font-bold">${wins}V</span> <span class="text-dim">·</span> <span class="text-dim font-bold">${draws}E</span> <span class="text-dim">·</span> <span class="text-loss font-bold">${losses}D</span></span>
         </div>
-        <div class="flex items-center gap-[3px] w-[130px] mt-1.5 h-[6px]">
-          <div class="h-full rounded-full border border-win/60 bg-win" style="width:${wr}%"></div>
-          <div class="h-full rounded-full border border-loss/60 bg-loss" style="width:${100 - wr}%"></div>
-        </div>
+        ${winLossBar(wins, draws, losses, 'gap-[3px] w-[130px] mt-1.5')}
       </td>
       <td class="px-4 py-3.5 align-middle font-bold text-sm">${p.stats?.kd || '0.00'}</td>
       <td class="px-4 py-3.5 align-middle font-bold text-sm">${p.stats?.headshotPct || p.stats?.hs || 0}%</td>
